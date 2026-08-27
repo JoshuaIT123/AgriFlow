@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
+import { PredictionPanel } from "@/components/PredictionPanel";
 import { useStoreVersion } from "@/lib/store-bus";
 import {
   getDealsForBuyer,
@@ -155,6 +156,7 @@ export default function BuyerDashboard() {
           ))
         )}
       </div>
+      <PredictionPanel />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { formatDateShort, formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
 import { useMemo } from "react";
 import { ProductBadge, OfferBadge, DealBadge } from "@/components/Badge";
+import { PredictionPanel } from "@/components/PredictionPanel";
 
 export default function FarmerDashboard() {
   const { user } = useAuth();
@@ -157,6 +158,7 @@ export default function FarmerDashboard() {
           ))
         )}
       </div>
+      <PredictionPanel />
     </div>
   );
 }

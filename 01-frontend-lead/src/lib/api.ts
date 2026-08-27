@@ -237,3 +237,27 @@ export function apiSettleTrade(tradeId: string): Promise<{ trade: ApiTrade }> {
     method: "POST",
   });
 }
+
+/* ---------------- Predictions ---------------- */
+
+export interface ProductForecast {
+  productId: string;
+  name: string;
+  currentPrice: number;
+  suggestedMin: number;
+  suggestedMax: number;
+  demand: "LOW" | "STEADY" | "HIGH";
+  note: string;
+}
+
+export interface Predictions {
+  generatedAt: string;
+  model: string;
+  summary: string;
+  forecasts: ProductForecast[];
+}
+
+/** AI price/demand outlook. The HF token stays server-side on the backend. */
+export function apiPredictions(): Promise<{ predictions: Predictions }> {
+  return request<{ predictions: Predictions }>("/api/predictions");
+}
