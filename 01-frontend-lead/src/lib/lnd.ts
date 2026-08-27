@@ -52,8 +52,11 @@ export function findPolarNode(preferName = "alice"): LndConfig | null {
     nodes?: { lightning?: unknown[] };
   }>;
 
+  // Polar writes status as a number (1 = Started); older builds used a string.
+const isStarted = (s: unknown) => Number(s) === 1 || String(s).toUpperCase() === "STARTED";
+
   const sortKey = (n: { status?: unknown; id?: unknown }) => {
-    const running = String(n.status).toUpperCase() === "STARTED" ? 1 : 0;
+    const running = isStarted(n.status) ? 1 : 0;
     return running * 1_000_000_000 + (Number(n.id) || 0);
   };
   const sorted = [...networks].sort((a, b) => sortKey(b) - sortKey(a));
@@ -226,9 +229,8 @@ export class LndClient {
     value?: string | number;
     settle_date?: number;
   }> {
-    // LND REST lookup takes URL-safe base64 of the payment hash.
-    const b64 = Buffer.from(hexRHash, "hex").toString("base64url");
-    return this.req("GET", `/v1/invoice/${encodeURIComponent(b64)}`);
+    // LND REST /v1/invoice/{r_hash_str} parses the path segment as hex.
+    return this.req("GET", `/v1/invoice/${hexRHash}`);
   }
 
   /** Helper: create an invoice and normalise to a simple shape. */
