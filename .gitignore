@@ -1,15 +1,15 @@
 .env
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build/
 
 # misc
 .DS_Store
@@ -32,3 +32,4 @@ next-env.d.ts
 # cache
 .npm-cache
 .cache
+
