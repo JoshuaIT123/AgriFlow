@@ -94,12 +94,18 @@ const isStarted = (s: unknown) => Number(s) === 1 || String(s).toUpperCase() ===
   return null;
 }
 
-/** Resolve LND config: env override first, then Polar auto-detect. */
+/**
+ * Resolve LND config: env override first, then Polar auto-detect.
+ *
+ * REST_HOST alone is enough when LND_MACAROON_HEX supplies the credential,
+ * which is how a hosted deployment reaches a node it has no filesystem access
+ * to. On a developer machine LND_DIR is still used to read the macaroon.
+ */
 export function resolveConfig(preferName = "alice"): LndConfig {
   const envDir = process.env.LND_DIR;
   const envHost = process.env.REST_HOST;
-  if (envDir && envHost) {
-    return { lndDir: envDir, restHost: envHost, nodeName: preferName };
+  if (envHost && (envDir || process.env.LND_MACAROON_HEX)) {
+    return { lndDir: envDir ?? "", restHost: envHost, nodeName: preferName };
   }
   return (
     findPolarNode(preferName) ?? {
@@ -114,6 +120,16 @@ export class LndClient {
   private macaroonHex = "";
 
   constructor(private config: LndConfig) {
+    /*
+     * A hosted deployment has no ~/.polar to read, so the macaroon may be
+     * supplied directly as hex. It is a full admin credential: only ever do
+     * this for a regtest node, never one holding real funds.
+     */
+    const fromEnv = process.env.LND_MACAROON_HEX?.trim();
+    if (fromEnv) {
+      this.macaroonHex = fromEnv;
+      return;
+    }
     try {
       const macPath = path.join(
         config.lndDir,
@@ -136,7 +152,9 @@ export class LndClient {
   private async req<T>(method: string, endpoint: string, body?: unknown): Promise<T> {
     if (!this.macaroonHex) {
       throw new Error(
-        `LND not found at ${this.config.lndDir}. Make sure a Polar LND node is running.`
+        this.config.lndDir
+          ? `LND not found at ${this.config.lndDir}. Make sure a Polar LND node is running.`
+          : "No LND credential. Set LND_MACAROON_HEX (hosted) or LND_DIR (local)."
       );
     }
     const headers: Record<string, string> = {
