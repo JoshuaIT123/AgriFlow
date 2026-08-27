@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "AgriFlow — Farming, paid on delivery",
     short_name: "AgriFlow",
     description:
-      "A secure, simple platform that pays Rwandan farmers reliably through Mobile Money.",
+      "A secure, simple platform that pays farmers reliably through Mobile Money.",
     start_url: "/",
     display: "standalone",
     background_color: "#f4f6f3",

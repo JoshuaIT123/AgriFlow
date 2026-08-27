@@ -5,7 +5,7 @@ import { AppProviders } from "@/lib/providers";
 export const metadata: Metadata = {
   title: "AgriFlow — Farming, paid on delivery",
   description:
-    "A secure, simple platform that pays Rwandan farmers reliably through Mobile Money.",
+    "A secure, simple platform that pays farmers reliably through Mobile Money.",
   applicationName: "AgriFlow",
   manifest: "/manifest.webmanifest",
   icons: {
