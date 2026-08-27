@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+enum Role {
+  farmer
+  buyer
+}
+
+enum OfferStatus {
+  pending
+  accepted
+  rejected
+}
+
+enum TradeStatus {
+  pending_payment
+  payment_confirmed
+  delivered
+  settled
+  cancelled
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+
+  products  Product[]
+  offers    Offer[]
+  trades    Trade[]  @relation("BuyerTrades")
+}
+
+model Product {
+  id           Int      @id @default(autoincrement())
+  farmerId     Int
+  farmer       User     @relation(fields: [farmerId], references: [id])
+  name         String
+  quantity     Float
+  unit         String
+  pricePerUnit Float
+  createdAt    DateTime @default(now())
+
+  offers       Offer[]
+}
+
+model Offer {
+  id         Int         @id @default(autoincrement())
+  productId  Int
+  product    Product     @relation(fields: [productId], references: [id])
+  buyerId    Int
+  buyer      User        @relation(fields: [buyerId], references: [id])
+  quantity   Float
+  price      Float
+  status     OfferStatus @default(pending)
+  createdAt  DateTime    @default(now())
+
+  trade      Trade?
+}
+
+model Trade {
+  id            Int         @id @default(autoincrement())
+  offerId       Int         @unique
+  offer         Offer       @relation(fields: [offerId], references: [id])
+  buyerId       Int
+  buyer         User        @relation("BuyerTrades", fields: [buyerId], references: [id])
+  status        TradeStatus @default(pending_payment)
+  invoiceId     String?
+  paymentReq    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
