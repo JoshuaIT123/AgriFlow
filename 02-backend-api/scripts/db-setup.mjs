@@ -1,12 +1,21 @@
-import { readFileSync } from "fs";
-import { connect, SCHEMA_SQL, DATABASE_URL } from "./db.mjs";
+import { prisma, run } from "./db.mjs";
 
-console.log(`Applying schema to ${DATABASE_URL}`);
-const client = await connect();
-try {
-  const sql = readFileSync(SCHEMA_SQL, "utf8");
-  await client.query(sql);
-  console.log("Schema applied.");
-} finally {
-  await client.end();
-}
+/**
+ * Verifies the database is reachable and reports what is in it.
+ * Schema changes are applied with `prisma migrate deploy`, not here.
+ */
+run("db:setup", async () => {
+  const rows = await prisma.$queryRaw`SELECT now() as now`;
+  console.log(`connected  ${rows[0].now.toISOString()}`);
+
+  const counts = {
+    users: await prisma.user.count(),
+    products: await prisma.product.count(),
+    offers: await prisma.offer.count(),
+    trades: await prisma.trade.count(),
+    payments: await prisma.payment.count(),
+  };
+  for (const [table, n] of Object.entries(counts)) {
+    console.log(`  ${table.padEnd(10)} ${n}`);
+  }
+});

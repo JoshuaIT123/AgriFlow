@@ -1,11 +1,16 @@
-import { connect } from "./db.mjs";
+import { clearAll, prisma, run } from "./db.mjs";
 
-const client = await connect();
-try {
-  await client.query(
-    "TRUNCATE payments, trades, offers, products, users RESTART IDENTITY CASCADE",
-  );
-  console.log("Database reset.");
-} finally {
-  await client.end();
-}
+/**
+ * Empties every table. Destructive, so it refuses to run without --yes:
+ * db:reset sits one keystroke away from db:seed.
+ */
+run("db:reset", async () => {
+  if (!process.argv.includes("--yes")) {
+    console.log("This deletes ALL rows in the database.");
+    console.log("Re-run to confirm:  npm run db:reset -- --yes");
+    return;
+  }
+  const before = await prisma.user.count();
+  await clearAll();
+  console.log(`cleared (was ${before} users)`);
+});

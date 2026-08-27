@@ -1,39 +1,34 @@
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
-import { existsSync, readFileSync } from "fs";
-import pg from "pg";
+import { PrismaClient } from "@prisma/client";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+/**
+ * Shared Prisma handle for the db:* scripts.
+ *
+ * These talk to the same Neon database and schema the API uses, so a seeded
+ * row is indistinguishable from one the app itself wrote.
+ */
+export const prisma = new PrismaClient();
 
-/** Reads DATABASE_URL from the local `.env` file when the env var is absent. */
-function defaultUrl() {
-  const envPath = join(__dirname, "..", ".env");
+/** Runs a script body, reports failure clearly, and always disconnects. */
+export async function run(label, fn) {
+  const started = Date.now();
   try {
-    if (existsSync(envPath)) {
-      const match = readFileSync(envPath, "utf8").match(/^DATABASE_URL=(.+)$/m);
-      if (match) return match[1].trim();
-    }
-  } catch {
-    /* fall through */
+    await fn();
+    console.log(`\n${label} completed in ${Date.now() - started}ms`);
+  } catch (err) {
+    console.error(`\n${label} FAILED:`);
+    console.error(err instanceof Error ? err.message : err);
+    process.exitCode = 1;
+  } finally {
+    await prisma.$disconnect();
   }
-  return "postgres://postgres@localhost:5432/agriflow";
 }
 
-export const DATABASE_URL = process.env.DATABASE_URL ?? defaultUrl();
-
-export const SCHEMA_SQL = join(
-  __dirname,
-  "..",
-  "src",
-  "lib",
-  "db",
-  "schema.sql",
-);
-
-const { Client } = pg;
-
-export async function connect() {
-  const client = new Client({ connectionString: DATABASE_URL });
-  await client.connect();
-  return client;
+/** Children before parents, so foreign keys stay satisfied. */
+export async function clearAll() {
+  await prisma.payment.deleteMany();
+  await prisma.tradeStatusEntry.deleteMany();
+  await prisma.trade.deleteMany();
+  await prisma.offer.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.user.deleteMany();
 }
