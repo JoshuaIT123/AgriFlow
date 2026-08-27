@@ -1,33 +1,73 @@
-﻿import { NextResponse } from "next/server";
-import { z } from "zod";
+import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { randomUUID } from "crypto";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { toPublicUser } from "@/lib/db/users";
+import { REGISTERABLE_ROLES } from "@/lib/config";
+import { signToken } from "@/lib/jwt";
+import { badRequest, conflict, sendOk } from "@/lib/http";
 
-const schema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(6),
-  role: z.enum(["farmer", "buyer"]),
+export const dynamic = "force-dynamic";
+
+const registerSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(100, "Name too long"),
+  phone: z
+    .string()
+    .trim()
+    .min(7, "Phone number is too short")
+    .max(20, "Phone number is too long")
+    .regex(/^\+?[0-9\s\-]+$/, "Invalid phone number format"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  role: z.enum(REGISTERABLE_ROLES, {
+    errorMap: () => ({ message: "Role must be FARMER or BUYER" }),
+  }),
+  location: z.string().trim().max(200, "Location too long").optional().default(""),
 });
 
-export async function POST(req: Request) {
-  const body = await req.json();
-  const parsed = schema.safeParse(body);
+export async function POST(request: NextRequest) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Invalid JSON body");
+  }
+
+  const parsed = registerSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
-  const { name, email, password, role } = parsed.data;
-
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return NextResponse.json({ error: "Email already registered" }, { status: 409 });
+    return badRequest(
+      "Validation failed",
+      parsed.error.flatten(),
+    );
   }
 
-  const hashed = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({
-    data: { name, email, password: hashed, role },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+  const { name, phone, password, role, location } = parsed.data;
+
+  // Business rule: phone numbers are unique identifiers for login.
+  if (db.users.findByPhone(phone)) {
+    return conflict("A user with this phone number already exists");
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = db.users.create({
+    id: randomUUID(),
+    name,
+    phone,
+    passwordHash,
+    role,
+    location: location || undefined,
+    status: "ACTIVE",
+    createdAt: new Date().toISOString(),
   });
 
-  return NextResponse.json({ user }, { status: 201 });
+  const publicUser = toPublicUser(user);
+  const token = signToken(publicUser);
+
+  return sendOk(
+    {
+      user: publicUser,
+      accessToken: token,
+    },
+    201,
+  );
 }

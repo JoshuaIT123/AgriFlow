@@ -1,29 +1,33 @@
-﻿import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getAuthUser } from "@/lib/auth";
+import { NextRequest } from "next/server";
+import { requireAuth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { conflict, forbidden, notFound, sendOk } from "@/lib/http";
+import { offerView } from "@/lib/services/views";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const authUser = getAuthUser(req);
-  if (!authUser) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (authUser.role !== "farmer") {
-    return NextResponse.json({ error: "Only farmers can reject offers" }, { status: 403 });
+export const dynamic = "force-dynamic";
+
+/** POST /api/offers/:id/reject - farmer rejects an offer (UC-15). */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const auth = requireAuth(request);
+  if ("error" in auth) return auth.error;
+
+  const offer = db.offers.findById(params.id);
+  if (!offer) return notFound("Offer not found");
+
+  const product = db.products.findById(offer.productId);
+  if (!product || product.farmerId !== auth.user.id) {
+    return forbidden("Only the product owner can reject this offer");
   }
 
-  const offerId = parseInt(params.id, 10);
-  const offer = await prisma.offer.findUnique({ include: { product: true }, where: { id: offerId } });
-  if (!offer) {
-    return NextResponse.json({ error: "Offer not found" }, { status: 404 });
-  }
-  if (offer.product.farmerId !== authUser.sub) {
-    return NextResponse.json({ error: "Not your product" }, { status: 403 });
-  }
-  if (offer.status !== "pending") {
-    return NextResponse.json({ error: "Offer already resolved" }, { status: 409 });
+  if (offer.status !== "PENDING") {
+    return conflict(`Offer has already been ${offer.status.toLowerCase()}`);
   }
 
-  const updatedOffer = await prisma.offer.update({ where: { id: offerId }, data: { status: "rejected" } });
+  const updated = db.offers.update(offer.id, { status: "REJECTED" });
+  if (!updated) return notFound("Offer not found");
 
-  return NextResponse.json({ offer: updatedOffer });
+  return sendOk({ offer: offerView(updated) });
 }

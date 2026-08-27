@@ -1,41 +1,57 @@
-﻿import { NextResponse } from "next/server";
-import { z } from "zod";
+import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { toPublicUser } from "@/lib/db/users";
+import { signToken } from "@/lib/jwt";
+import { badRequest, sendOk, unauthorized } from "@/lib/http";
 
-const schema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+export const dynamic = "force-dynamic";
+
+const loginSchema = z.object({
+  phone: z
+    .string()
+    .trim()
+    .min(7, "Phone number is too short")
+    .max(20, "Phone number is too long")
+    .regex(/^\+?[0-9\s\-]+$/, "Invalid phone number format"),
+  password: z.string().min(1, "Password is required"),
 });
 
-export async function POST(req: Request) {
-  const body = await req.json();
-  const parsed = schema.safeParse(body);
+export async function POST(request: NextRequest) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Invalid JSON body");
+  }
+
+  const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return badRequest("Validation failed", parsed.error.flatten());
   }
-  const { email, password } = parsed.data;
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const { phone, password } = parsed.data;
+
+  const user = db.users.findByPhone(phone);
+
+  // Generic error message on purpose: do not leak whether a phone number
+  // exists in the system (prevents user enumeration).
+  const INVALID_CREDENTIALS = "Invalid phone number or password";
   if (!user) {
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    return unauthorized(INVALID_CREDENTIALS);
   }
 
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) {
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+  const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+  if (!passwordMatches) {
+    return unauthorized(INVALID_CREDENTIALS);
   }
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
-  }
+  const publicUser = toPublicUser(user);
+  const token = signToken(publicUser);
 
-  const token = jwt.sign({ sub: user.id, role: user.role }, secret, { expiresIn: "7d" });
-
-  return NextResponse.json({
-    token,
-    user: { id: user.id, name: user.name, email: user.email, role: user.role },
+  return sendOk({
+    user: publicUser,
+    accessToken: token,
   });
 }

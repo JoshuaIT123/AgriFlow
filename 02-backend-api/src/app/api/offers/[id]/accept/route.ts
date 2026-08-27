@@ -1,34 +1,67 @@
-﻿import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getAuthUser } from "@/lib/auth";
+import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
+import { requireAuth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { conflict, forbidden, notFound, sendOk } from "@/lib/http";
+import { tradeView } from "@/lib/services/views";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const authUser = getAuthUser(req);
-  if (!authUser) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (authUser.role !== "farmer") {
-    return NextResponse.json({ error: "Only farmers can accept offers" }, { status: 403 });
+export const dynamic = "force-dynamic";
+
+/**
+ * POST /api/offers/:id/accept - farmer accepts an offer (UC-14).
+ * An accepted offer produces a valid Trade (UC-16). The trade is created in
+ * AGREED state (offer acceptance = agreement on terms). Product stock is
+ * reduced by the offered quantity.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const auth = requireAuth(request);
+  if ("error" in auth) return auth.error;
+
+  const offer = db.offers.findById(params.id);
+  if (!offer) return notFound("Offer not found");
+
+  const product = db.products.findById(offer.productId);
+
+  // Only the product owner can accept.
+  if (!product || product.farmerId !== auth.user.id) {
+    return forbidden("Only the product owner can accept this offer");
   }
 
-  const offerId = parseInt(params.id, 10);
-  const offer = await prisma.offer.findUnique({ include: { product: true }, where: { id: offerId } });
-  if (!offer) {
-    return NextResponse.json({ error: "Offer not found" }, { status: 404 });
+  if (offer.status !== "PENDING") {
+    return conflict(`Offer has already been ${offer.status.toLowerCase()}`);
   }
-  if (offer.product.farmerId !== authUser.sub) {
-    return NextResponse.json({ error: "Not your product" }, { status: 403 });
+  if (product.status !== "ACTIVE") {
+    return conflict("The product is no longer available");
   }
-  if (offer.status !== "pending") {
-    return NextResponse.json({ error: "Offer already resolved" }, { status: 409 });
+  if (offer.quantity > product.quantity) {
+    return conflict(
+      `Not enough available quantity (remaining ${product.quantity} ${product.unit})`,
+    );
   }
 
-  const [updatedOffer, trade] = await prisma.$transaction([
-    prisma.offer.update({ where: { id: offerId }, data: { status: "accepted" } }),
-    prisma.trade.create({
-      data: { offerId: offerId, buyerId: offer.buyerId, status: "pending_payment" },
-    }),
-  ]);
+  const now = new Date().toISOString();
+  const trade = db.trades.create({
+    id: randomUUID(),
+    offerId: offer.id,
+    buyerId: offer.buyerId,
+    farmerId: product.farmerId,
+    productId: product.id,
+    quantity: offer.quantity,
+    agreedPrice: offer.price,
+    totalAmount: offer.totalAmount,
+    status: "AGREED",
+    statusHistory: [{ status: "AGREED", at: now }],
+    createdAt: now,
+    updatedAt: now,
+  });
 
-  return NextResponse.json({ offer: updatedOffer, trade });
+  db.products.update(product.id, {
+    quantity: product.quantity - offer.quantity,
+  });
+  db.offers.update(offer.id, { status: "ACCEPTED" });
+
+  return sendOk({ trade: tradeView(trade) }, 201);
 }

@@ -1,28 +1,25 @@
-﻿import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getAuthUser } from "@/lib/auth";
+import { NextRequest } from "next/server";
+import { requireAuth, canAccessTrade } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { forbidden, notFound, sendOk } from "@/lib/http";
+import { tradeView } from "@/lib/services/views";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const authUser = getAuthUser(req);
-  if (!authUser) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export const dynamic = "force-dynamic";
+
+/** GET /api/trades/:id - view a trade (UC-17). */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const auth = requireAuth(_request);
+  if ("error" in auth) return auth.error;
+
+  const trade = db.trades.findById(params.id);
+  if (!trade) return notFound("Trade not found");
+
+  if (!canAccessTrade(auth.user, trade)) {
+    return forbidden("You do not have access to this trade");
   }
 
-  const tradeId = parseInt(params.id, 10);
-  const trade = await prisma.trade.findUnique({
-    where: { id: tradeId },
-    include: { offer: { include: { product: true } }, buyer: { select: { id: true, name: true } } },
-  });
-
-  if (!trade) {
-    return NextResponse.json({ error: "Trade not found" }, { status: 404 });
-  }
-
-  const isBuyer = trade.buyerId === authUser.sub;
-  const isFarmer = trade.offer.product.farmerId === authUser.sub;
-  if (!isBuyer && !isFarmer) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  return NextResponse.json({ trade });
+  return sendOk({ trade: tradeView(trade) });
 }
