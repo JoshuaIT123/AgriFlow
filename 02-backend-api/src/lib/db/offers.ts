@@ -1,87 +1,62 @@
-import { pool } from "./pool";
-import { buildUpdate, toIso, toNumber } from "./utils";
-import type { Offer, OfferStatus } from "../types";
-
-interface OfferRow {
-  id: string;
-  buyer_id: string;
-  product_id: string;
-  quantity: string | number;
-  price: string | number;
-  total_amount: string | number;
-  status: OfferStatus;
-  created_at: Date | string;
-}
-
-function rowToOffer(r: OfferRow): Offer {
-  return {
-    id: r.id,
-    buyerId: r.buyer_id,
-    productId: r.product_id,
-    quantity: toNumber(r.quantity),
-    price: toNumber(r.price),
-    totalAmount: toNumber(r.total_amount),
-    status: r.status,
-    createdAt: toIso(r.created_at),
-  };
-}
-
-const UPDATE_COLUMNS = [
-  { col: "buyer_id", camel: "buyerId" },
-  { col: "product_id", camel: "productId" },
-  { col: "quantity", camel: "quantity" },
-  { col: "price", camel: "price" },
-  { col: "total_amount", camel: "totalAmount" },
-  { col: "status", camel: "status" },
-] as const;
+import { prisma } from "../prisma";
+import type { Offer } from "../types";
 
 export class OfferRepository {
-  async create(input: Offer): Promise<Offer> {
-    const res = await pool.query(
-      `INSERT INTO offers (id, buyer_id, product_id, quantity, price, total_amount, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [
-        input.id,
-        input.buyerId,
-        input.productId,
-        input.quantity,
-        input.price,
-        input.totalAmount,
-        input.status,
-        input.createdAt,
-      ],
-    );
-    return rowToOffer(res.rows[0] as OfferRow);
+  async create(input: Omit<Offer, "createdAt">): Promise<Offer> {
+    const o = await prisma.offer.create({
+      data: {
+        id: input.id,
+        buyerId: input.buyerId,
+        productId: input.productId,
+        quantity: input.quantity,
+        price: input.price,
+        totalAmount: input.totalAmount,
+        status: input.status,
+      },
+    });
+    return this.toOffer(o);
   }
 
   async update(id: string, patch: Partial<Offer>): Promise<Offer | undefined> {
-    const q = buildUpdate("offers", id, patch, UPDATE_COLUMNS);
-    if (!q) return this.findById(id);
-    const res = await pool.query(q.text, q.params);
-    return res.rows[0] ? rowToOffer(res.rows[0] as OfferRow) : undefined;
+    try {
+      const o = await prisma.offer.update({ where: { id }, data: patch });
+      return this.toOffer(o);
+    } catch {
+      return undefined;
+    }
   }
 
   async findById(id: string): Promise<Offer | undefined> {
-    const res = await pool.query("SELECT * FROM offers WHERE id = $1", [id]);
-    return res.rows[0] ? rowToOffer(res.rows[0] as OfferRow) : undefined;
+    const o = await prisma.offer.findUnique({ where: { id } });
+    return o ? this.toOffer(o) : undefined;
   }
 
   async listByBuyer(buyerId: string): Promise<Offer[]> {
-    const res = await pool.query(
-      "SELECT * FROM offers WHERE buyer_id = $1 ORDER BY created_at DESC",
-      [buyerId],
-    );
-    return (res.rows as OfferRow[]).map(rowToOffer);
+    const items = await prisma.offer.findMany({
+      where: { buyerId },
+      orderBy: { createdAt: "desc" },
+    });
+    return items.map(this.toOffer);
   }
 
-  /** Offers received for a farmer's set of product ids. */
   async listForProducts(productIds: readonly string[]): Promise<Offer[]> {
-    if (productIds.length === 0) return [];
-    const res = await pool.query(
-      `SELECT * FROM offers WHERE product_id = ANY($1::uuid[]) ORDER BY created_at DESC`,
-      [productIds],
-    );
-    return (res.rows as OfferRow[]).map(rowToOffer);
+    const items = await prisma.offer.findMany({
+      where: { productId: { in: [...productIds] } },
+      orderBy: { createdAt: "desc" },
+    });
+    return items.map(this.toOffer);
+  }
+
+  private toOffer(o: any): Offer {
+    return {
+      id: o.id,
+      buyerId: o.buyerId,
+      productId: o.productId,
+      quantity: o.quantity,
+      price: o.price,
+      totalAmount: o.totalAmount,
+      status: o.status,
+      createdAt: o.createdAt.toISOString(),
+    };
   }
 }

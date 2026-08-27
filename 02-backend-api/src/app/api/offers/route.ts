@@ -59,7 +59,6 @@ export async function POST(request: NextRequest) {
     price,
     totalAmount,
     status: "PENDING",
-    createdAt: new Date().toISOString(),
   });
 
   return sendOk({ offer: await offerView(offer) }, 201);

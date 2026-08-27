@@ -1,36 +1,31 @@
-﻿import { NextResponse } from "next/server";
-import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { NextRequest } from "next/server";
+import { requireAuth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { sendOk } from "@/lib/http";
+import { tradeView } from "@/lib/services/views";
 
-const schema = z.object({
-  status: z.enum(["payment_confirmed", "delivered", "settled", "cancelled"]),
-  invoiceId: z.string().optional(),
-  paymentReq: z.string().optional(),
-});
+export const dynamic = "force-dynamic";
 
-// Called by the Lightning layer (internal service-to-service, not end-user auth)
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const internalKey = req.headers.get("x-internal-key");
-  if (internalKey !== process.env.INTERNAL_SERVICE_KEY) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+/**
+ * GET /api/trades - trade history for the current user (UC-18).
+ * Optional ?role=buyer|farmer narrows the list; default returns all trades
+ * the user participates in (as buyer or farmer).
+ */
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if ("error" in auth) return auth.error;
+
+  const { searchParams } = new URL(request.url);
+  const role = searchParams.get("role");
+
+  let trades;
+  if (role === "buyer") {
+    trades = await db.trades.listByBuyer(auth.user.id);
+  } else if (role === "farmer") {
+    trades = await db.trades.listByFarmer(auth.user.id);
+  } else {
+    trades = await db.trades.listForUser(auth.user.id);
   }
 
-  const tradeId = parseInt(params.id, 10);
-  const body = await req.json();
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const trade = await prisma.trade.findUnique({ where: { id: tradeId } });
-  if (!trade) {
-    return NextResponse.json({ error: "Trade not found" }, { status: 404 });
-  }
-
-  const updated = await prisma.trade.update({
-    where: { id: tradeId },
-    data: parsed.data,
-  });
-
-  return NextResponse.json({ trade: updated });
+  return sendOk({ trades: trades.map(async (t) => await tradeView(t)) });
 }

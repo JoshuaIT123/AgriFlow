@@ -1,57 +1,27 @@
 import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
 import { z } from "zod";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { badRequest, forbidden, notFound, sendOk } from "@/lib/http";
+import { badRequest, forbidden, sendOk } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/products/:id - product details (UC-08). */
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { id: string } },
-) {
-  const auth = await requireAuth(_request);
-  if ("error" in auth) return auth.error;
-
-  const product = await db.products.findById(params.id);
-  if (!product) return notFound("Product not found");
-
-  // Deactivated products are only visible to their owner (or ADMIN).
-  if (
-    product.status !== "ACTIVE" &&
-    product.farmerId !== auth.user.id &&
-    auth.user.role !== "ADMIN"
-  ) {
-    return notFound("Product not found");
-  }
-
-  return sendOk({ product });
-}
-
-const updateProductSchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
-  quantity: z.coerce.number().positive().optional(),
-  unit: z.string().trim().min(1).max(20).optional(),
-  price: z.coerce.number().positive().optional(),
-  location: z.string().trim().min(1).max(200).optional(),
-  quality: z.string().trim().max(120).optional(),
+const createProductSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120, "Name too long"),
+  quantity: z.coerce.number().positive("Quantity must be greater than 0"),
+  unit: z.string().trim().min(1, "Unit is required").max(20),
+  price: z.coerce.number().positive("Price must be greater than 0"),
+  location: z.string().trim().min(1, "Location is required").max(200),
+  quality: z.string().trim().max(120).optional().default(""),
 });
 
-/** PATCH /api/products/:id - farmer updates own product (UC-09). */
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+/** POST /api/products - farmer creates a product (UC-06). */
+export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
-
-  const product = await db.products.findById(params.id);
-  if (!product) return notFound("Product not found");
-
-  if (product.farmerId !== auth.user.id && auth.user.role !== "ADMIN") {
-    return forbidden("Only the product owner can update this product");
-  }
+  const roleErr = requireRole(auth.user, ["FARMER"]);
+  if (roleErr) return roleErr;
 
   let body: unknown;
   try {
@@ -60,35 +30,52 @@ export async function PATCH(
     return badRequest("Invalid JSON body");
   }
 
-  const parsed = updateProductSchema.safeParse(body);
+  const parsed = createProductSchema.safeParse(body);
   if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
+  const { name, quantity, unit, price, location, quality } = parsed.data;
 
-  const updated = await db.products.update(params.id, parsed.data);
-  if (!updated) return notFound("Product not found");
+  const product = await db.products.create({
+    id: randomUUID(),
+    farmerId: auth.user.id,
+    name,
+    quantity,
+    unit,
+    price,
+    location,
+    quality,
+    status: "ACTIVE",
+  });
 
-  return sendOk({ product: updated });
+  return sendOk({ product }, 201);
 }
 
 /**
- * DELETE /api/products/:id - farmer deactivates own product (UC-10).
- * Soft delete: status -> DEACTIVATED (history is preserved).
+ * GET /api/products - browse products (UC-07).
+ * Default lists ACTIVE products. ?mine=true lists the farmer's own products
+ * (all statuses). Optional ?q= filters by name/location.
  */
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: { id: string } },
-) {
-  const auth = await requireAuth(_request);
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
-  const product = await db.products.findById(params.id);
-  if (!product) return notFound("Product not found");
+  const { searchParams } = new URL(request.url);
+  const mine = searchParams.get("mine") === "true";
+  const q = searchParams.get("q")?.trim().toLowerCase();
 
-  if (product.farmerId !== auth.user.id && auth.user.role !== "ADMIN") {
-    return forbidden("Only the product owner can deactivate this product");
+  let products;
+  if (mine) {
+    const roleErr = requireRole(auth.user, ["FARMER", "ADMIN"]);
+    if (roleErr) return roleErr;
+    products = auth.user.role === "ADMIN" ? await db.products.listActive() : await db.products.listByFarmer(auth.user.id);
+  } else {
+    products = await db.products.listActive();
   }
 
-  const updated = await db.products.update(params.id, { status: "DEACTIVATED" });
-  if (!updated) return notFound("Product not found");
+  if (q) {
+    products = products.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.location.toLowerCase().includes(q),
+    );
+  }
 
-  return sendOk({ product: updated });
+  return sendOk({ products });
 }

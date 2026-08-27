@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendOk } from "@/lib/http";
-import { offerViews } from "@/lib/services/views";
+import { offerView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
   const roleErr = requireRole(auth.user, ["FARMER", "ADMIN"]);
   if (roleErr) return roleErr;
 
-  const productIds = (await db.products.listByFarmer(auth.user.id)).map((p) => p.id);
+  const farmerProducts = await db.products.listByFarmer(auth.user.id);
+  const productIds = farmerProducts.map((p) => p.id);
   const offers = await db.offers.listForProducts(productIds);
 
   offers.sort((a, b) => {
@@ -25,5 +26,5 @@ export async function GET(request: NextRequest) {
     return b.createdAt.localeCompare(a.createdAt);
   });
 
-  return sendOk({ offers: await offerViews(offers) });
+  return sendOk({ offers: offers.map(async (o) => await offerView(o)) });
 }

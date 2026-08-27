@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { badRequest, sendOk } from "@/lib/http";
+import { badRequest, forbidden, sendOk } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
     location,
     quality,
     status: "ACTIVE",
-    createdAt: new Date().toISOString(),
   });
 
   return sendOk({ product }, 201);
@@ -67,10 +66,7 @@ export async function GET(request: NextRequest) {
   if (mine) {
     const roleErr = requireRole(auth.user, ["FARMER", "ADMIN"]);
     if (roleErr) return roleErr;
-    products =
-      auth.user.role === "ADMIN"
-        ? await db.products.listActive()
-        : await db.products.listByFarmer(auth.user.id);
+    products = auth.user.role === "ADMIN" ? await db.products.listActive() : await db.products.listByFarmer(auth.user.id);
   } else {
     products = await db.products.listActive();
   }

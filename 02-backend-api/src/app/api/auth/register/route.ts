@@ -54,7 +54,6 @@ export async function POST(request: NextRequest) {
     role,
     location: location || undefined,
     status: "ACTIVE",
-    createdAt: new Date().toISOString(),
   });
 
   const publicUser = toPublicUser(user);

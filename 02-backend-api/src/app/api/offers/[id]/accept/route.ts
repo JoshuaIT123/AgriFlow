@@ -1,43 +1,38 @@
 import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { conflict, forbidden, notFound, sendOk } from "@/lib/http";
+import { badRequest, conflict, forbidden, notFound, sendOk } from "@/lib/http";
 import { tradeView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/offers/:id/accept - farmer accepts an offer (UC-14).
- * An accepted offer produces a valid Trade (UC-16). The trade is created in
- * AGREED state (offer acceptance = agreement on terms). Product stock is
- * reduced by the offered quantity.
+ * POST /api/offers/[id]/accept - farmer accepts a pending offer (UC-14).
+ * Creates a Trade, decrements product quantity, marks the offer ACCEPTED.
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
+  const roleErr = requireRole(auth.user, ["FARMER", "ADMIN"]);
+  if (roleErr) return roleErr;
 
   const offer = await db.offers.findById(params.id);
   if (!offer) return notFound("Offer not found");
 
   const product = await db.products.findById(offer.productId);
-
-  // Only the product owner can accept.
   if (!product || product.farmerId !== auth.user.id) {
-    return forbidden("Only the product owner can accept this offer");
+    return forbidden("You do not own the product for this offer");
   }
 
   if (offer.status !== "PENDING") {
     return conflict(`Offer has already been ${offer.status.toLowerCase()}`);
   }
   if (product.status !== "ACTIVE") {
-    return conflict("The product is no longer available");
+    return badRequest("Product is no longer active");
   }
   if (offer.quantity > product.quantity) {
-    return conflict(
+    return badRequest(
       `Not enough available quantity (remaining ${product.quantity} ${product.unit})`,
     );
   }
@@ -54,8 +49,6 @@ export async function POST(
     totalAmount: offer.totalAmount,
     status: "AGREED",
     statusHistory: [{ status: "AGREED", at: now }],
-    createdAt: now,
-    updatedAt: now,
   });
 
   await db.products.update(product.id, {

@@ -1,80 +1,60 @@
-import { pool } from "./pool";
-import { buildUpdate, toIso } from "./utils";
-import type { User, Role, UserStatus } from "../types";
+import { prisma } from "../prisma";
+import type { User } from "../types";
 
-interface UserRow {
-  id: string;
-  name: string;
-  phone: string;
-  password_hash: string;
-  role: Role;
-  location: string | null;
-  status: UserStatus;
-  created_at: Date | string;
-}
-
-function rowToUser(r: UserRow): User {
-  return {
-    id: r.id,
-    name: r.name,
-    phone: r.phone,
-    passwordHash: r.password_hash,
-    role: r.role,
-    location: r.location ?? undefined,
-    status: r.status,
-    createdAt: toIso(r.created_at),
-  };
-}
-
-const UPDATE_COLUMNS = [
-  { col: "name", camel: "name" },
-  { col: "phone", camel: "phone" },
-  { col: "password_hash", camel: "passwordHash" },
-  { col: "role", camel: "role" },
-  { col: "location", camel: "location" },
-  { col: "status", camel: "status" },
-] as const;
-
+/**
+ * Prisma-backed repository for Users (Postgres via Neon).
+ */
 export class UserRepository {
-  async create(input: User): Promise<User> {
-    const res = await pool.query(
-      `INSERT INTO users (id, name, phone, password_hash, role, location, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [
-        input.id,
-        input.name,
-        input.phone,
-        input.passwordHash,
-        input.role,
-        input.location ?? null,
-        input.status,
-        input.createdAt,
-      ],
-    );
-    return rowToUser(res.rows[0] as UserRow);
+  async create(input: Omit<User, "createdAt">): Promise<User> {
+    const user = await prisma.user.create({
+      data: {
+        id: input.id,
+        name: input.name,
+        phone: input.phone,
+        passwordHash: input.passwordHash,
+        role: input.role,
+        location: input.location,
+        status: input.status,
+      },
+    });
+    return this.toUser(user);
   }
 
   async update(id: string, patch: Partial<User>): Promise<User | undefined> {
-    const q = buildUpdate("users", id, patch, UPDATE_COLUMNS);
-    if (!q) return this.findById(id);
-    const res = await pool.query(q.text, q.params);
-    return res.rows[0] ? rowToUser(res.rows[0] as UserRow) : undefined;
+    try {
+      const user = await prisma.user.update({ where: { id }, data: patch });
+      return this.toUser(user);
+    } catch {
+      return undefined;
+    }
   }
 
   async findById(id: string): Promise<User | undefined> {
-    const res = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
-    return res.rows[0] ? rowToUser(res.rows[0] as UserRow) : undefined;
+    const user = await prisma.user.findUnique({ where: { id } });
+    return user ? this.toUser(user) : undefined;
   }
 
   async findByPhone(phone: string): Promise<User | undefined> {
-    const res = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
-    return res.rows[0] ? rowToUser(res.rows[0] as UserRow) : undefined;
+    const user = await prisma.user.findUnique({ where: { phone } });
+    return user ? this.toUser(user) : undefined;
   }
 
   async all(): Promise<User[]> {
-    const res = await pool.query("SELECT * FROM users ORDER BY created_at DESC");
-    return (res.rows as UserRow[]).map(rowToUser);
+    const users = await prisma.user.findMany();
+    return users.map(this.toUser);
+  }
+
+  private toUser(u: any): User {
+    return {
+      id: u.id,
+      name: u.name,
+      phone: u.phone,
+      passwordHash: u.passwordHash,
+      role: u.role,
+      location: u.location ?? undefined,
+      status: u.status,
+      createdAt: u.createdAt.toISOString(),
+    };
   }
 }
 

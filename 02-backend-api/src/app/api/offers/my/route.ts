@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendOk } from "@/lib/http";
-import { offerViews } from "@/lib/services/views";
+import { offerView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
@@ -16,5 +16,5 @@ export async function GET(request: NextRequest) {
       ? await db.offers.listForProducts((await db.products.listActive()).map((p) => p.id))
       : await db.offers.listByBuyer(auth.user.id);
 
-  return sendOk({ offers: await offerViews(offers) });
+  return sendOk({ offers: offers.map(async (o) => await offerView(o)) });
 }

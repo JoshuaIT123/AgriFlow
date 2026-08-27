@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendOk } from "@/lib/http";
-import { tradeViews } from "@/lib/services/views";
+import { tradeView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
@@ -27,5 +27,5 @@ export async function GET(request: NextRequest) {
     trades = await db.trades.listForUser(auth.user.id);
   }
 
-  return sendOk({ trades: await tradeViews(trades) });
+  return sendOk({ trades: trades.map(async (t) => await tradeView(t)) });
 }
