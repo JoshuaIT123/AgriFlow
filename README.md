@@ -66,6 +66,35 @@ Cutting across all of this:
 Each numbered folder has its own `README.md` with responsibilities,
 architecture notes, dependencies, and handoff points for that role.
 
+## Frontend app (Next.js)
+
+The working frontend MVP lives at the **repository root** (this is the
+`Frontend V1` deliverable). It is a self-contained Next.js 16 + React 19 app
+with farmer/buyer panels, a bilingual landing page, and a **Lightning payment
+interface** (LND/Polar invoice generation with QR + settlement polling,
+mirroring the `lightning-webstore` approach).
+
+```
+src/app/                Next.js App Router pages (landing, login, register,
+                        farmer/* , buyer/* , api/lightning)
+src/components/         LightningPay, OfferDialog, WalletBoard, panels, etc.
+src/lib/                store (localStorage), i18n (EN/RW), lnd (LND client)
+public/images/          Landing page imagery
+```
+
+Run it:
+
+```bash
+npm install
+npm run dev       # http://localhost:3000
+npm run build     # production build
+npm run lint      # eslint
+```
+
+Lightning payments: start a Polar network with an LND node (e.g. `alice`),
+then use the Wallet → "Pay with Lightning" top-up to create a real invoice
+and pay it with any Lightning wallet.
+
 ## Development roadmap
 
 | Step | Focus | Primary owner(s) |
