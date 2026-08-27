@@ -1,0 +1,7 @@
+{
+  "name": "Bitcoin for Farmers",
+  "description": "A financial platform bringing Bitcoin-powered savings, payments, remittances, and AI yield forecasting to Rwanda's farmers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

@@ -1,0 +1,32 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Glow Circle -->
+    <path
+        android:fillColor="#D3E4FF"
+        android:pathData="M54,20 A34,34 0 1,1 53.9,20 Z"
+        android:alpha="0.2" />
+    
+    <!-- Bitcoin Circle -->
+    <path
+        android:fillColor="#F7931A"
+        android:pathData="M54,26 A28,28 0 1,1 53.9,26 Z" />
+    
+    <!-- Bitcoin Symbol B -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M51.5,37 L51.5,41 L47.5,41 L47.5,44 L51.5,44 L51.5,59 L47.5,59 L47.5,62 L51.5,62 L51.5,66 L55.5,66 L55.5,62 C60.5,62 64.5,60 64.5,55.5 C64.5,52.5 62.5,50.8 59.5,50 C62,49 63.5,47.2 63.5,44.5 C63.5,40.5 59.8,37.5 55.5,37.5 L55.5,37 L51.5,37 Z M55,44 C57.2,44 59,45.2 59,47 C59,48.8 57.2,50 55,50 L55,44 Z M55,53 C57.8,53 60,54.4 60,56.5 C60,58.6 57.8,60 55,60 L55,53 Z" />
+
+    <!-- Agriculture Sprout Leaf on Bottom Right -->
+    <path
+        android:fillColor="#C2E7FF"
+        android:pathData="M70,72 C70,60 84,58 84,58 C84,58 86,72 74,74 C72,74 70.8,73.2 70,72 Z" />
+    <path
+        android:fillColor="#6750A4"
+        android:pathData="M66,75 C68,70 73,68 76,69"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5" />
+</vector>
+
