@@ -18,19 +18,22 @@ export function RoleGuard({
   roleLabelKey: string;
   children: ReactNode;
 }) {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
 
   useEffect(() => {
+    // Wait for the stored token to be validated; otherwise a refresh would
+    // bounce a signed-in user to /login before /api/auth/me answers.
+    if (!ready) return;
     if (!user) {
       router.replace("/login");
     } else if (user.role !== role) {
       router.replace(panelHome(user.role));
     }
-  }, [user, role, router]);
+  }, [ready, user, role, router]);
 
-  if (!user) {
+  if (!ready || !user) {
     return <div className="spinner">{t("common.loading")}</div>;
   }
 

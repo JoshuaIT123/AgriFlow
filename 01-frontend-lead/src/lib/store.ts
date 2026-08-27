@@ -1,4 +1,14 @@
 import { bumpStore } from "./store-bus";
+import {
+  ApiError,
+  apiAcceptOffer,
+  apiConfirmDelivery,
+  apiCreateOffer,
+  apiCreateProduct,
+  apiRejectOffer,
+  apiSetProductStatus,
+} from "./api";
+import { cachedDeals, cachedOffers, cachedProducts, refresh } from "./remote";
 import type {
   Account,
   BuyerArrangement,
@@ -25,18 +35,17 @@ export interface StoredAccount extends Account {
   passwordHash: string; // demo hash only — never a real credential
 }
 
+/*
+ * Products, offers and trades live on the backend (see remote.ts). Only the
+ * wallet and recurring arrangements remain local: the API has no model for
+ * either yet, so they stay client-side rather than being silently dropped.
+ */
 interface Data {
-  products: Product[];
-  offers: Offer[];
-  deals: Deal[];
   walletTxns: WalletTxn[];
   arrangements: BuyerArrangement[];
 }
 
 const EMPTY: Data = {
-  products: [],
-  offers: [],
-  deals: [],
   walletTxns: [],
   arrangements: [],
 };
@@ -68,9 +77,6 @@ function readData(): Data {
     if (!raw) return EMPTY;
     const p = JSON.parse(raw) as Partial<Data>;
     return {
-      products: Array.isArray(p.products) ? p.products : [],
-      offers: Array.isArray(p.offers) ? p.offers : [],
-      deals: Array.isArray(p.deals) ? p.deals : [],
       walletTxns: Array.isArray(p.walletTxns) ? p.walletTxns : [],
       arrangements: Array.isArray(p.arrangements) ? p.arrangements : [],
     };
@@ -171,7 +177,6 @@ export function createAccount(input: {
   const accounts = readAccounts();
   accounts.push(account);
   writeAccounts(accounts);
-  seedForNewAccount(account);
   return account;
 }
 
@@ -193,54 +198,53 @@ export function getAccount(id: string | null): StoredAccount | null {
 
 /* ---------------- Accessors (read-only slices) ---------------- */
 
+/*
+ * These read the remote cache filled by remote.hydrate(). They stay
+ * synchronous so the existing pages keep working unchanged: a page reads its
+ * slice, and re-reads when store-bus bumps after a hydrate or a mutation.
+ */
+
 export function getProducts(farmerId?: string): Product[] {
-  const list = readData().products;
+  const list = cachedProducts();
   const filtered = farmerId ? list.filter((p) => p.farmerId === farmerId) : list;
-  return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function getAvailableProducts(): Product[] {
-  return readData()
-    .products.filter((p) => p.status === "available")
+  return cachedProducts()
+    .filter((p) => p.status === "available")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function getProduct(id: string): Product | undefined {
-  return readData().products.find((p) => p.id === id);
+  return cachedProducts().find((p) => p.id === id);
 }
 
 export function getOffersForProduct(productId: string): Offer[] {
-  return readData()
-    .offers.filter((o) => o.productId === productId)
+  return cachedOffers()
+    .filter((o) => o.productId === productId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function getOffersReceivedByFarmer(farmerId: string): Offer[] {
-  const myProductIds = new Set(
-    readData()
-      .products.filter((p) => p.farmerId === farmerId)
-      .map((p) => p.id)
-  );
-  return readData()
-    .offers.filter((o) => myProductIds.has(o.productId))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+/** The backend already scopes /api/offers/received to the caller's products. */
+export function getOffersReceivedByFarmer(_farmerId: string): Offer[] {
+  return [...cachedOffers()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function getMyOffers(buyerId: string): Offer[] {
-  return readData()
-    .offers.filter((o) => o.buyerId === buyerId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+/** The backend already scopes /api/offers/my to the calling buyer. */
+export function getMyOffers(_buyerId: string): Offer[] {
+  return [...cachedOffers()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function getDealsForFarmer(farmerId: string): Deal[] {
-  return readData()
-    .deals.filter((d) => d.farmerId === farmerId)
+  return cachedDeals()
+    .filter((d) => d.farmerId === farmerId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function getDealsForBuyer(buyerId: string): Deal[] {
-  return readData()
-    .deals.filter((d) => d.buyerId === buyerId)
+  return cachedDeals()
+    .filter((d) => d.buyerId === buyerId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -282,7 +286,13 @@ export function simulateWalletTopUp(accountId: string, amount: number) {
 
 /* ---------------- Product / Offer / Deal mutations ---------------- */
 
-export function createProduct(input: {
+/*
+ * Mutations go straight to the backend and then refresh the cache, so what
+ * the UI shows after an action is what the database actually stored rather
+ * than an optimistic guess.
+ */
+
+export async function createProduct(input: {
   farmerId: string;
   farmerName: string;
   title: string;
@@ -290,152 +300,85 @@ export function createProduct(input: {
   quantityKg: number;
   pricePerKg: number;
   unit?: Unit;
-}): Product {
-  const product: Product = {
-    id: uid(),
-    farmerId: input.farmerId,
-    farmerName: input.farmerName,
-    title: input.title.trim(),
-    category: input.category.trim(),
-    quantityKg: input.quantityKg,
-    pricePerKg: input.pricePerKg,
-    unit: input.unit || "kg",
-    currency: "RWF",
-    status: "available",
-    createdAt: new Date().toISOString(),
-  };
-  const data = readData();
-  data.products.push(product);
-  writeData(data);
-  return product;
+  location?: string;
+}): Promise<boolean> {
+  try {
+    await apiCreateProduct({
+      name: input.title.trim(),
+      quantity: input.quantityKg,
+      unit: input.unit || "kg",
+      price: input.pricePerKg,
+      // Location is required by the API; fall back to the seller's name so a
+      // listing is never rejected for a field the form does not collect.
+      location: input.location?.trim() || input.farmerName,
+      quality: input.category.trim(),
+    });
+    await refresh();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function setProductStatus(
+export async function setProductStatus(
   productId: string,
-  status: Product["status"]
-): boolean {
-  const data = readData();
-  const p = data.products.find((x) => x.id === productId);
-  if (!p) return false;
-  p.status = status;
-  writeData(data);
-  return true;
+  status: Product["status"],
+): Promise<boolean> {
+  try {
+    await apiSetProductStatus(productId, status === "available" ? "ACTIVE" : "DEACTIVATED");
+    await refresh();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function placeOffer(input: {
+export async function placeOffer(input: {
   productId: string;
   buyerId: string;
   buyerName: string;
   pricePerKg: number;
   quantityKg: number;
   message?: string;
-}): boolean {
-  const data = readData();
-  const product = data.products.find((p) => p.id === input.productId);
-  if (!product || product.status !== "available") return false;
-  const existing = data.offers.find(
-    (o) =>
-      o.productId === input.productId &&
-      o.buyerId === input.buyerId &&
-      o.status === "pending"
-  );
-  if (existing) return false; // one pending offer per buyer per product
-  data.offers.push({
-    id: uid(),
-    productId: input.productId,
-    buyerId: input.buyerId,
-    buyerName: input.buyerName,
-    pricePerKg: input.pricePerKg,
-    quantityKg: input.quantityKg,
-    unit: product.unit || "kg",
-    currency: "RWF",
-    message: input.message?.trim() || undefined,
-    status: "pending",
-    createdAt: new Date().toISOString(),
-  });
-  writeData(data);
-  return true;
+}): Promise<boolean> {
+  try {
+    // The backend computes the total; it never trusts a client-sent amount.
+    await apiCreateOffer({
+      productId: input.productId,
+      quantity: input.quantityKg,
+      price: input.pricePerKg,
+    });
+    await refresh();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function respondToOffer(
+export async function respondToOffer(
   offerId: string,
-  response: Extract<OfferStatus, "accepted" | "rejected">
-): "ok" | "not_found" | "already_responded" {
-  const data = readData();
-  const offer = data.offers.find((o) => o.id === offerId);
-  if (!offer) return "not_found";
-  if (offer.status !== "pending") return "already_responded";
-  offer.status = response;
-
-  if (response === "accepted") {
-    const product = data.products.find((p) => p.id === offer.productId);
-    if (product) product.status = "sold";
-    const amount = offer.quantityKg * offer.pricePerKg;
-    const now = new Date().toISOString();
-    const deal: Deal = {
-      id: uid(),
-      productId: offer.productId,
-      offerId: offer.id,
-      farmerId: product?.farmerId ?? "",
-      farmerName: product?.farmerName ?? "",
-      buyerId: offer.buyerId,
-      buyerName: offer.buyerName,
-      productTitle: product?.title ?? "Product",
-      quantityKg: offer.quantityKg,
-      unit: offer.unit || "kg",
-      amountRwf: amount,
-      currency: "RWF",
-      status: "pending_delivery",
-      autoReleaseInHours: 72,
-      createdAt: now,
-      confirmedAt: null,
-      releasedAt: null,
-      hasConditionalSettlement: true,
-    };
-    // Escrow: buyer's amount is held (pending debit), not yet settled.
-    data.deals.push(deal);
-    if (product) {
-      data.walletTxns.push({
-        id: uid(),
-        accountId: offer.buyerId,
-        kind: "debit",
-        amount,
-        currency: "RWF",
-        status: "pending",
-        note: `escrow:${deal.id}`,
-        createdAt: now,
-      });
-    }
+  response: Extract<OfferStatus, "accepted" | "rejected">,
+): Promise<"ok" | "not_found" | "already_responded"> {
+  try {
+    if (response === "accepted") await apiAcceptOffer(offerId);
+    else await apiRejectOffer(offerId);
+    await refresh();
+    return "ok";
+  } catch (err) {
+    // 409 means the farmer already answered this offer elsewhere.
+    if (err instanceof ApiError && err.status === 409) return "already_responded";
+    return "not_found";
   }
-
-  writeData(data);
-  return "ok";
 }
 
-export function confirmDelivery(dealId: string): boolean {
-  const data = readData();
-  const deal = data.deals.find((d) => d.id === dealId);
-  if (!deal || deal.status !== "pending_delivery") return false;
-  deal.status = "confirmed";
-  const now = new Date().toISOString();
-  deal.confirmedAt = now;
-  deal.releasedAt = now;
-  // Settle escrow: debit settles on buyer, credit lands on farmer.
-  for (const txn of data.walletTxns) {
-    if (txn.note === `escrow:${deal.id}`) txn.status = "settled";
+export async function confirmDelivery(dealId: string): Promise<boolean> {
+  try {
+    await apiConfirmDelivery(dealId);
+    await refresh();
+    return true;
+  } catch {
+    return false;
   }
-  data.walletTxns.push({
-    id: uid(),
-    accountId: deal.farmerId,
-    kind: "credit",
-    amount: deal.amountRwf,
-    currency: "RWF",
-    status: "settled",
-    note: `deal:${deal.id}`,
-    createdAt: now,
-  });
-  writeData(data);
-  return true;
 }
 
 /* ---------------- Recurring arrangements ---------------- */
@@ -490,271 +433,6 @@ function nextCycleDate(cadence: "monthly" | "seasonal"): Date {
   if (cadence === "monthly") now.setMonth(now.getMonth() + 1);
   else now.setMonth(now.getMonth() + 3);
   return now;
-}
-
-/* ---------------- Seeding ---------------- */
-
-function seedForNewAccount(account: StoredAccount) {
-  const data = readData();
-  const now = Date.now();
-  const h = (n: number) => new Date(now + n * 3600_000).toISOString();
-  const p = (n: number) => new Date(now - n * 3600_000).toISOString();
-
-  if (account.role === "farmer") {
-    // Wallet: starting balance for the demo.
-    data.walletTxns.push(
-      {
-        id: uid(),
-        accountId: account.id,
-        kind: "credit",
-        amount: 250000,
-        currency: "RWF",
-        status: "settled",
-        note: "seed",
-        createdAt: p(120),
-      },
-      {
-        id: uid(),
-        accountId: account.id,
-        kind: "credit",
-        amount: 360000,
-        currency: "RWF",
-        status: "settled",
-        note: "deal:demo1",
-        createdAt: p(24),
-      }
-    );
-
-    const products: Product[] = [
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Irish potatoes",
-        category: "Tubers",
-        quantityKg: 500,
-        pricePerKg: 1800,
-        currency: "RWF",
-        status: "available",
-        createdAt: p(6),
-      },
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Maize",
-        category: "Cereals",
-        quantityKg: 800,
-        pricePerKg: 1200,
-        currency: "RWF",
-        status: "available",
-        createdAt: p(28),
-      },
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Arabica coffee",
-        category: "Cash crop",
-        quantityKg: 120,
-        pricePerKg: 6000,
-        currency: "RWF",
-        status: "available",
-        createdAt: p(52),
-      },
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Beans",
-        category: "Legumes",
-        quantityKg: 150,
-        pricePerKg: 2000,
-        currency: "RWF",
-        status: "sold",
-        createdAt: p(90),
-      },
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Live cattle (heifer)",
-        category: "Livestock",
-        quantityKg: 4,
-        pricePerKg: 450000,
-        unit: "head",
-        currency: "RWF",
-        status: "available",
-        createdAt: p(20),
-      },
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Goats",
-        category: "Livestock",
-        quantityKg: 12,
-        pricePerKg: 95000,
-        unit: "head",
-        currency: "RWF",
-        status: "available",
-        createdAt: p(32),
-      },
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Free-range chicken",
-        category: "Poultry",
-        quantityKg: 25,
-        pricePerKg: 12000,
-        unit: "unit",
-        currency: "RWF",
-        status: "available",
-        createdAt: p(15),
-      },
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Fresh milk (per litre)",
-        category: "Dairy",
-        quantityKg: 200,
-        pricePerKg: 1400,
-        unit: "litre",
-        currency: "RWF",
-        status: "available",
-        createdAt: p(5),
-      },
-      {
-        id: uid(),
-        farmerId: account.id,
-        farmerName: account.name,
-        title: "Eggs",
-        category: "Poultry",
-        quantityKg: 60,
-        pricePerKg: 400,
-        unit: "dozen",
-        currency: "RWF",
-        status: "available",
-        createdAt: p(10),
-      },
-    ];
-    data.products.push(...products);
-
-    // A rival farmer's product so the demo marketplace isn't farmer-only.
-    const rivalId = "rival-farmer-1";
-    data.products.push({
-      id: uid(),
-      farmerId: rivalId,
-      farmerName: "Uwimana Jean",
-      title: "Sweet potatoes",
-      category: "Tubers",
-      quantityKg: 300,
-      pricePerKg: 1500,
-      currency: "RWF",
-      status: "available",
-      createdAt: p(14),
-    });
-    data.products.push({
-      id: uid(),
-      farmerId: rivalId,
-      farmerName: "Uwimana Jean",
-      title: "Improved dairy cow",
-      category: "Livestock",
-      quantityKg: 2,
-      pricePerKg: 800000,
-      unit: "head",
-      currency: "RWF",
-      status: "available",
-      createdAt: p(12),
-    });
-
-    // One incoming offer on the coffee product.
-    data.offers.push({
-      id: uid(),
-      productId: products[2].id,
-      buyerId: "demo-buyer-1",
-      buyerName: "Café du Rift Export",
-      pricePerKg: 6200,
-      quantityKg: 100,
-      currency: "RWF",
-      message: "We buy every season — happy to sign a standing arrangement.",
-      status: "pending",
-      createdAt: p(8),
-    });
-
-    // One completed deal (paid) + one waiting on delivery confirmation.
-    const dealPaid: Deal = {
-      id: uid(),
-      productId: products[3].id,
-      offerId: "demo-offer-done",
-      farmerId: account.id,
-      farmerName: account.name,
-      buyerId: "demo-buyer-1",
-      buyerName: "Café du Rift Export",
-      productTitle: "Beans",
-      quantityKg: 150,
-      amountRwf: 300000,
-      currency: "RWF",
-      status: "confirmed",
-      autoReleaseInHours: 72,
-      createdAt: p(96),
-      confirmedAt: p(90),
-      releasedAt: p(90),
-      hasConditionalSettlement: true,
-    };
-    const dealPending: Deal = {
-      id: uid(),
-      productId: products[1].id,
-      offerId: "demo-offer-pending",
-      farmerId: account.id,
-      farmerName: account.name,
-      buyerId: "demo-buyer-1",
-      buyerName: "Café du Rift Export",
-      productTitle: "Maize",
-      quantityKg: 200,
-      amountRwf: 240000,
-      currency: "RWF",
-      status: "pending_delivery",
-      autoReleaseInHours: 72,
-      createdAt: p(30),
-      confirmedAt: null,
-      releasedAt: null,
-      hasConditionalSettlement: true,
-    };
-    data.deals.push(dealPaid, dealPending);
-
-    data.arrangements.push({
-      id: uid(),
-      farmerId: account.id,
-      buyer: "Café du Rift Export",
-      item: "Arabica coffee",
-      pricePerKg: 6000,
-      currency: "RWF",
-      cadence: "monthly",
-      status: "active",
-      createdAt: p(400),
-      nextCycle: h(120),
-      totalCycles: 12,
-      completedCycles: 4,
-    });
-  }
-
-  if (account.role === "buyer") {
-    data.walletTxns.push({
-      id: uid(),
-      accountId: account.id,
-      kind: "credit",
-      amount: 3000000,
-      currency: "RWF",
-      status: "settled",
-      note: "seed",
-      createdAt: p(200),
-    });
-  }
-
-  writeData(data);
 }
 
 export function uid(): string {

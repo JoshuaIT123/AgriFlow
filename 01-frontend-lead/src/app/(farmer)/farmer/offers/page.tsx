@@ -34,8 +34,8 @@ export default function FarmerOffers() {
 
   if (!user) return null;
 
-  const handleRespond = (offerId: string, response: "accepted" | "rejected") => {
-    const res = respondToOffer(offerId, response);
+  const handleRespond = async (offerId: string, response: "accepted" | "rejected") => {
+    const res = await respondToOffer(offerId, response);
     if (res === "ok") {
       setToast(response === "accepted" ? t("offer.accepted.msg") : t("offer.rejected.msg"));
     }

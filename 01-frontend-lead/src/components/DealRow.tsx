@@ -29,8 +29,8 @@ export function DealRow({
     deal.status === "pending_delivery" || deal.status === "released";
   const canConfirm = (confirmableBy ?? "buyer") === "buyer";
 
-  const handleConfirm = () => {
-    if (confirmDelivery(deal.id)) {
+  const handleConfirm = async () => {
+    if (await confirmDelivery(deal.id)) {
       bumpStore();
       if (onConfirm) onConfirm();
     }

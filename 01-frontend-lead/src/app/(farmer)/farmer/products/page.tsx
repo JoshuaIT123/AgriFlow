@@ -55,7 +55,7 @@ export default function FarmerProducts() {
 
   if (!user) return null;
 
-  const post = (e: FormEvent) => {
+  const post = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     const q = Number(qty);
@@ -64,7 +64,7 @@ export default function FarmerProducts() {
       setError(t("auth.err.required"));
       return;
     }
-    createProduct({
+    const ok = await createProduct({
       farmerId: user.id,
       farmerName: user.name,
       title,
@@ -73,6 +73,10 @@ export default function FarmerProducts() {
       pricePerKg: p,
       unit,
     });
+    if (!ok) {
+      setError(t("auth.err.required"));
+      return;
+    }
     setTitle("");
     setQty("");
     setPrice("");

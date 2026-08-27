@@ -2,8 +2,9 @@ import { db } from "../db";
 import { toPublicUser } from "../db/users";
 import type { Offer, Product, Trade } from "../types";
 
-export function productView(product: Product) {
-  return { ...product };
+/** Product enriched with its owning farmer, so listings can show a seller. */
+export async function productView(product: Product) {
+  return { ...product, farmer: await userSummary(product.farmerId) };
 }
 
 async function productSummary(productId: string) {

@@ -19,7 +19,7 @@ export default function LoginPage() {
     if (user) router.replace(panelHome(user.role));
   }, [user, router]);
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!phone.trim() || !password) {
@@ -30,7 +30,7 @@ export default function LoginPage() {
       setError(t("auth.err.phone"));
       return;
     }
-    if (!login(phone.trim(), password)) {
+    if (!(await login(phone.trim(), password))) {
       setError(t("auth.err.login"));
     }
   };

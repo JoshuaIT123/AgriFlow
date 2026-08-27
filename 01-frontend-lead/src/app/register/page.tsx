@@ -28,7 +28,7 @@ export default function RegisterPage() {
 
   const networkLabel = (key: string) => t(key);
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!name.trim() || !phone.trim() || !password || !confirm) {
@@ -47,7 +47,7 @@ export default function RegisterPage() {
       setError(t("auth.err.password"));
       return;
     }
-    register({
+    const ok = await register({
       name: name.trim(),
       phone: phone.trim(),
       password,
@@ -55,6 +55,7 @@ export default function RegisterPage() {
       role,
       locale,
     });
+    if (!ok) setError(t("auth.err.register"));
   };
 
   return (

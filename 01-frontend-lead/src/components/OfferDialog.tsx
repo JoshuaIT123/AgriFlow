@@ -25,7 +25,7 @@ export function OfferDialog({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     const p = Number(price);
@@ -34,7 +34,7 @@ export function OfferDialog({
       setError(t("auth.err.required"));
       return;
     }
-    const ok = placeOffer({
+    const ok = await placeOffer({
       productId: product.id,
       buyerId,
       buyerName,

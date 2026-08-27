@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { badRequest, forbidden, sendOk } from "@/lib/http";
+import { productView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     status: "ACTIVE",
   });
 
-  return sendOk({ product }, 201);
+  return sendOk({ product: await productView(product) }, 201);
 }
 
 /**
@@ -77,5 +78,5 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return sendOk({ products });
+  return sendOk({ products: await Promise.all(products.map((p) => productView(p))) });
 }

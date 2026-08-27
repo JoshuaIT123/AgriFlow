@@ -64,6 +64,7 @@ export const translations: Record<Locale, Dict> = {
     "auth.err.password": "Passwords do not match.",
     "auth.err.phone": "Please enter a valid phone number.",
     "auth.err.login": "No account found with that phone and password. Try again or create an account.",
+    "auth.err.register": "Could not create the account. That phone number may already be registered.",
 
     /* Farmer nav + labels */
     "farmer.nav.dashboard": "Dashboard",
@@ -300,6 +301,7 @@ export const translations: Record<Locale, Dict> = {
     "auth.err.password": "Aya mambobanga ntabwo ahuza.",
     "auth.err.phone": "Shyiramo nomero ya telefoni ikwiye.",
     "auth.err.login": "Nta konte ibonetse n'iyo nomero n'ijambobanga. Ongera ugerageze cyangwa ufungure konte.",
+    "auth.err.register": "Konte ntiyashoboye gufungurwa. Iyi nomero ishobora kuba isanzwe yanditse.",
 
     "farmer.nav.dashboard": "Urubuga rw'ibanze",
     "farmer.nav.products": "Ibicuruzwa byanjye",
