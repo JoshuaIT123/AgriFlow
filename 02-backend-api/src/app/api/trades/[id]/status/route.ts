@@ -1,31 +1,68 @@
 import { NextRequest } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { z } from "zod";
 import { db } from "@/lib/db";
-import { sendOk } from "@/lib/http";
+import { DomainError } from "@/lib/errors";
+import { badRequest, notFound, sendError, sendOk, unauthorized } from "@/lib/http";
+import { transitionTrade } from "@/lib/services/trades";
 import { tradeView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
+const statusSchema = z.object({
+  status: z.enum([
+    "PAYMENT_LOCKED",
+    "DELIVERY_PENDING",
+    "DELIVERED",
+    "SETTLED",
+    "CANCELLED",
+    "AGREED",
+  ]),
+});
+
 /**
- * GET /api/trades - trade history for the current user (UC-18).
- * Optional ?role=buyer|farmer narrows the list; default returns all trades
- * the user participates in (as buyer or farmer).
+ * PATCH /api/trades/:id/status - internal service-to-service transition.
+ *
+ * Called by the Lightning layer when an invoice settles or fails, not by an
+ * end user: authentication is the shared INTERNAL_SERVICE_KEY rather than a
+ * user Bearer token. The trade state machine still governs which transitions
+ * are legal, so an out-of-order callback is rejected with 409 instead of
+ * corrupting the trade.
  */
-export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request);
-  if ("error" in auth) return auth.error;
-
-  const { searchParams } = new URL(request.url);
-  const role = searchParams.get("role");
-
-  let trades;
-  if (role === "buyer") {
-    trades = await db.trades.listByBuyer(auth.user.id);
-  } else if (role === "farmer") {
-    trades = await db.trades.listByFarmer(auth.user.id);
-  } else {
-    trades = await db.trades.listForUser(auth.user.id);
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const expected = process.env.INTERNAL_SERVICE_KEY;
+  if (!expected) {
+    return sendError("INTERNAL_SERVICE_KEY is not configured", 500);
+  }
+  if (request.headers.get("x-internal-key") !== expected) {
+    return unauthorized("Invalid internal service key");
   }
 
-  return sendOk({ trades: trades.map(async (t) => await tradeView(t)) });
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Invalid JSON body");
+  }
+
+  const parsed = statusSchema.safeParse(body);
+  if (!parsed.success) {
+    return badRequest("Validation failed", parsed.error.flatten());
+  }
+
+  const trade = await db.trades.findById(params.id);
+  if (!trade) return notFound("Trade not found");
+
+  try {
+    const updated = transitionTrade(trade, parsed.data.status);
+    await db.trades.update(updated.id, updated);
+    return sendOk({ trade: await tradeView(updated) });
+  } catch (err) {
+    if (err instanceof DomainError) {
+      return sendError(err.message, err.status);
+    }
+    throw err;
+  }
 }
