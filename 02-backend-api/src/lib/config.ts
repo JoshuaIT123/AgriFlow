@@ -1,8 +1,11 @@
 export const config = {
   jwtSecret: process.env.JWT_SECRET ?? "agriflow-dev-secret",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
-  /** RWF -> millisatoshis conversion used by the mock Lightning layer. */
+  /** RWF -> millisatoshis conversion used by the Lightning layer. */
   msatPerRwf: Number(process.env.MSAT_PER_RWF ?? 10),
+  /** PostgreSQL connection string. */
+  databaseUrl:
+    process.env.DATABASE_URL ?? "postgres://postgres@localhost:5432/agriflow",
 };
 
 // Default role allowed at registration. Admin users are seeded/epic not public.

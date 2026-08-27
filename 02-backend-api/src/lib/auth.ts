@@ -15,14 +15,14 @@ export function getRequestToken(request: NextRequest): string | null {
 }
 
 /** Validates the Bearer token and returns the authenticated user. */
-export function requireAuth(request: NextRequest): AuthResult {
+export async function requireAuth(request: NextRequest): Promise<AuthResult> {
   const token = getRequestToken(request);
   if (!token) return { error: unauthorized("Authentication required") };
 
   const payload = verifyToken(token);
   if (!payload) return { error: unauthorized("Invalid or expired token") };
 
-  const user = db.users.findById(payload.sub);
+  const user = await db.users.findById(payload.sub);
   if (!user) return { error: unauthorized("User not found") };
 
   return { user };

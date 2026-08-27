@@ -6,8 +6,8 @@ export function productView(product: Product) {
   return { ...product };
 }
 
-function productSummary(productId: string) {
-  const p = db.products.findById(productId);
+async function productSummary(productId: string) {
+  const p = await db.products.findById(productId);
   return p
     ? {
         id: p.id,
@@ -21,30 +21,40 @@ function productSummary(productId: string) {
     : null;
 }
 
-function userSummary(userId: string) {
-  const u = db.users.findById(userId);
+async function userSummary(userId: string) {
+  const u = await db.users.findById(userId);
   return u ? toPublicUser(u) : null;
 }
 
 /** Offer enriched with its product + buyer + owner farmer (for the UI). */
-export function offerView(offer: Offer) {
-  const product = db.products.findById(offer.productId);
+export async function offerView(offer: Offer) {
+  const product = await db.products.findById(offer.productId);
   return {
     ...offer,
-    product: productSummary(offer.productId),
-    buyer: userSummary(offer.buyerId),
-    farmer: product ? userSummary(product.farmerId) : null,
+    product: await productSummary(offer.productId),
+    buyer: await userSummary(offer.buyerId),
+    farmer: product ? await userSummary(product.farmerId) : null,
   };
 }
 
 /** Trade enriched with product, counterparts and latest payment. */
-export function tradeView(trade: Trade) {
-  const [payment] = db.payments.findByTrade(trade.id);
+export async function tradeView(trade: Trade) {
+  const [payment] = await db.payments.findByTrade(trade.id);
   return {
     ...trade,
-    product: productSummary(trade.productId),
-    buyer: userSummary(trade.buyerId),
-    farmer: userSummary(trade.farmerId),
+    product: await productSummary(trade.productId),
+    buyer: await userSummary(trade.buyerId),
+    farmer: await userSummary(trade.farmerId),
     payment: payment ?? null,
   };
+}
+
+/** Convenience: map a list of trades to views concurrently. */
+export async function tradeViews(trades: Trade[]) {
+  return Promise.all(trades.map(tradeView));
+}
+
+/** Convenience: map a list of offers to views concurrently. */
+export async function offerViews(offers: Offer[]) {
+  return Promise.all(offers.map(offerView));
 }

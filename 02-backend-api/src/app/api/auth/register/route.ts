@@ -35,21 +35,18 @@ export async function POST(request: NextRequest) {
 
   const parsed = registerSchema.safeParse(body);
   if (!parsed.success) {
-    return badRequest(
-      "Validation failed",
-      parsed.error.flatten(),
-    );
+    return badRequest("Validation failed", parsed.error.flatten());
   }
 
   const { name, phone, password, role, location } = parsed.data;
 
   // Business rule: phone numbers are unique identifiers for login.
-  if (db.users.findByPhone(phone)) {
+  if (await db.users.findByPhone(phone)) {
     return conflict("A user with this phone number already exists");
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = db.users.create({
+  const user = await db.users.create({
     id: randomUUID(),
     name,
     phone,

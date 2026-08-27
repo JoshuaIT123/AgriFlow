@@ -2,15 +2,39 @@
 
 AgriFlow backend - Next.js 14 (App Router) API-only service.
 
-## Run
+## Setup (PostgreSQL)
+
+The API persists to PostgreSQL. Provide `DATABASE_URL` (defaults to
+`postgres://postgres@localhost:5432/agriflow`; see `.env.example`).
 
 ```bash
 npm install
+
+# 1. Start a local Postgres (see below) or point DATABASE_URL at an existing one.
+# 2. Apply the schema (idempotent):
+npm run db:setup
+
+# optional: seed demo farmer/buyer users (password: secret123)
+npm run db:seed
+
+# 3. Run the backend
 npm run dev        # http://localhost:3000
-npm run build
-npm run start
-npm run typecheck
 ```
+
+A local cluster is already initialised in `.pgdata/` (gitignored). Manage it with:
+
+```bash
+pg_ctl -D .pgdata -l .pgdata/log -o '-p 5732 -k /tmp' start   # start
+pg_ctl -D .pgdata stop                                        # stop
+```
+
+DB convenience scripts (read `DATABASE_URL` from `.env` if the env var is unset):
+
+| Script | Effect |
+|---|---|
+| `npm run db:setup` | Applies `src/lib/db/schema.sql` (`CREATE TABLE IF NOT EXISTS`) |
+| `npm run db:seed` | Inserts demo FARMER/BUYER users (password `secret123`) |
+| `npm run db:reset` | Empties all tables |
 
 ## Environment
 
@@ -19,7 +43,8 @@ npm run typecheck
 | `JWT_SECRET` | `agriflow-dev-secret` | HS256 signing secret |
 | `JWT_EXPIRES_IN` | `7d` | Access token lifetime |
 | `PORT` | `3000` | Dev/start port |
-| `MSAT_PER_RWF` | `10` | RWF -> millisatoshis used by the mock Lightning layer |
+| `DATABASE_URL` | `postgres://postgres@localhost:5432/agriflow` | PostgreSQL connection string |
+| `MSAT_PER_RWF` | `10` | RWF -> millisatoshis used by the Lightning layer |
 | `LIGHTNING_MOCK_MODE` | `autopay` | `autopay` \| `manual` \| `fail` (see Lightning boundary) |
 
 ## Auth
@@ -97,9 +122,13 @@ to the frontend.
 
 ## Data layer
 
-`src/lib/db/` holds in-memory repositories matching the entity shapes. This is
-the contract for Person 4 (Database/Integration): swap repository internals
-for real queries without touching route handlers.
+`src/lib/db/` holds PostgreSQL-backed repositories (via `pg`). Each repository
+maps rows to the entity shapes in `src/lib/types.ts`, so the API layer is
+independent of SQL details. Schema lives in `src/lib/db/schema.sql`
+(`npm run db:setup`). Data is real and persisted across restarts.
+
+The `LightningService` mock is the only remaining stub - it is the backend-side
+**contract** to the Lightning engineer and not a data-layer mock.
 
 ## Error format
 

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendOk } from "@/lib/http";
-import { offerView } from "@/lib/services/views";
+import { offerViews } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
@@ -11,15 +11,13 @@ export const dynamic = "force-dynamic";
  * Pending offers are listed first, then newest.
  */
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
   const roleErr = requireRole(auth.user, ["FARMER", "ADMIN"]);
   if (roleErr) return roleErr;
 
-  const productIds = db.products
-    .listByFarmer(auth.user.id)
-    .map((p) => p.id);
-  const offers = db.offers.listForProducts(productIds);
+  const productIds = (await db.products.listByFarmer(auth.user.id)).map((p) => p.id);
+  const offers = await db.offers.listForProducts(productIds);
 
   offers.sort((a, b) => {
     if (a.status === "PENDING" && b.status !== "PENDING") return -1;
@@ -27,5 +25,5 @@ export async function GET(request: NextRequest) {
     return b.createdAt.localeCompare(a.createdAt);
   });
 
-  return sendOk({ offers: offers.map(offerView) });
+  return sendOk({ offers: await offerViews(offers) });
 }

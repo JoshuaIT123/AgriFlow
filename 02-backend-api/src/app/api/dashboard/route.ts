@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/dashboard - role-aware summary (UC-26 farmer, UC-27 buyer). */
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
-  return sendOk({ dashboard: buildDashboard(auth.user) });
+  return sendOk({ dashboard: await buildDashboard(auth.user) });
 }

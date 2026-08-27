@@ -17,13 +17,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
-  const offer = db.offers.findById(params.id);
+  const offer = await db.offers.findById(params.id);
   if (!offer) return notFound("Offer not found");
 
-  const product = db.products.findById(offer.productId);
+  const product = await db.products.findById(offer.productId);
 
   // Only the product owner can accept.
   if (!product || product.farmerId !== auth.user.id) {
@@ -43,7 +43,7 @@ export async function POST(
   }
 
   const now = new Date().toISOString();
-  const trade = db.trades.create({
+  const trade = await db.trades.create({
     id: randomUUID(),
     offerId: offer.id,
     buyerId: offer.buyerId,
@@ -58,10 +58,10 @@ export async function POST(
     updatedAt: now,
   });
 
-  db.products.update(product.id, {
+  await db.products.update(product.id, {
     quantity: product.quantity - offer.quantity,
   });
-  db.offers.update(offer.id, { status: "ACCEPTED" });
+  await db.offers.update(offer.id, { status: "ACCEPTED" });
 
-  return sendOk({ trade: tradeView(trade) }, 201);
+  return sendOk({ trade: await tradeView(trade) }, 201);
 }

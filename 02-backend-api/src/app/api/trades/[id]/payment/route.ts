@@ -18,10 +18,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
-  const trade = db.trades.findById(params.id);
+  const trade = await db.trades.findById(params.id);
   if (!trade) return notFound("Trade not found");
 
   if (trade.buyerId !== auth.user.id && auth.user.role !== "ADMIN") {
@@ -43,7 +43,7 @@ export async function POST(
   });
 
   const now = new Date().toISOString();
-  const payment = db.payments.create({
+  const payment = await db.payments.create({
     id: randomUUID(),
     tradeId: trade.id,
     paymentRequest: invoice.paymentRequest,
@@ -54,7 +54,7 @@ export async function POST(
   });
 
   const updated = transitionTrade(trade, "PAYMENT_PENDING");
-  db.trades.update(updated.id, updated);
+  await db.trades.update(updated.id, updated);
 
-  return sendOk({ payment, trade: tradeView(updated) }, 201);
+  return sendOk({ payment, trade: await tradeView(updated) }, 201);
 }

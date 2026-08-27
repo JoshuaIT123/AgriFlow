@@ -1,3 +1,4 @@
+import { pool } from "./pool";
 import { UserRepository } from "./users";
 import { ProductRepository } from "./products";
 import { OfferRepository } from "./offers";
@@ -5,9 +6,9 @@ import { TradeRepository } from "./trades";
 import { PaymentRepository } from "./payments";
 
 /**
- * Central application data access.
- * Repositories are singletons per-process. In a real DB world these would
- * wrap connection pools / query builders from the Database team (Person 4).
+ * Central data access, backed by PostgreSQL.
+ * Each repository maps rows to the entity shapes used by route handlers,
+ * so swapping or extending queries does not touch the API layer.
  */
 export const db = {
   users: new UserRepository(),
@@ -17,11 +18,9 @@ export const db = {
   payments: new PaymentRepository(),
 };
 
-/** Resets all repositories (used for tests / seeding a fresh demo). */
-export function resetDb(): void {
-  db.users = new UserRepository();
-  db.products = new ProductRepository();
-  db.offers = new OfferRepository();
-  db.trades = new TradeRepository();
-  db.payments = new PaymentRepository();
+/** Empties all tables (used by db:reset and integration tests). */
+export async function resetDb(): Promise<void> {
+  await pool.query(
+    "TRUNCATE payments, trades, offers, products, users RESTART IDENTITY CASCADE",
+  );
 }

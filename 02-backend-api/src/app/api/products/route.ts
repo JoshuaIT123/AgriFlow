@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { badRequest, forbidden, sendOk } from "@/lib/http";
+import { badRequest, sendOk } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ const createProductSchema = z.object({
 
 /** POST /api/products - farmer creates a product (UC-06). */
 export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
   const roleErr = requireRole(auth.user, ["FARMER"]);
   if (roleErr) return roleErr;
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
   const { name, quantity, unit, price, location, quality } = parsed.data;
 
-  const product = db.products.create({
+  const product = await db.products.create({
     id: randomUUID(),
     farmerId: auth.user.id,
     name,
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
  * (all statuses). Optional ?q= filters by name/location.
  */
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
   const { searchParams } = new URL(request.url);
@@ -67,9 +67,12 @@ export async function GET(request: NextRequest) {
   if (mine) {
     const roleErr = requireRole(auth.user, ["FARMER", "ADMIN"]);
     if (roleErr) return roleErr;
-    products = auth.user.role === "ADMIN" ? db.products.listActive() : db.products.listByFarmer(auth.user.id);
+    products =
+      auth.user.role === "ADMIN"
+        ? await db.products.listActive()
+        : await db.products.listByFarmer(auth.user.id);
   } else {
-    products = db.products.listActive();
+    products = await db.products.listActive();
   }
 
   if (q) {

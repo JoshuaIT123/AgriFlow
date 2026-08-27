@@ -11,13 +11,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
-  const offer = db.offers.findById(params.id);
+  const offer = await db.offers.findById(params.id);
   if (!offer) return notFound("Offer not found");
 
-  const product = db.products.findById(offer.productId);
+  const product = await db.products.findById(offer.productId);
   if (!product || product.farmerId !== auth.user.id) {
     return forbidden("Only the product owner can reject this offer");
   }
@@ -26,8 +26,8 @@ export async function POST(
     return conflict(`Offer has already been ${offer.status.toLowerCase()}`);
   }
 
-  const updated = db.offers.update(offer.id, { status: "REJECTED" });
+  const updated = await db.offers.update(offer.id, { status: "REJECTED" });
   if (!updated) return notFound("Offer not found");
 
-  return sendOk({ offer: offerView(updated) });
+  return sendOk({ offer: await offerView(updated) });
 }

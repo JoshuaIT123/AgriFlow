@@ -12,11 +12,13 @@ function statusCounts(trades: Trade[]) {
 }
 
 /** Role-aware summary used by GET /api/dashboard (UC-26/27). */
-export function buildDashboard(user: User) {
+export async function buildDashboard(user: User) {
   if (user.role === "FARMER") {
-    const products = db.products.listByFarmer(user.id);
-    const offers = db.offers.listForProducts(products.map((p) => p.id));
-    const trades = db.trades.listByFarmer(user.id);
+    const [products, trades] = await Promise.all([
+      db.products.listByFarmer(user.id),
+      db.trades.listByFarmer(user.id),
+    ]);
+    const offers = await db.offers.listForProducts(products.map((p) => p.id));
     const settled = trades.filter((t) => t.status === "SETTLED");
 
     return {
@@ -29,20 +31,22 @@ export function buildDashboard(user: User) {
       },
       offers: {
         pending: offers.filter((o) => o.status === "PENDING").length,
-        recent: offers.slice(0, 5).map(offerView),
+        recent: await Promise.all(offers.slice(0, 5).map(offerView)),
       },
       trades: {
         active: trades.filter((t) => !TERMINAL.has(t.status)).length,
         byStatus: statusCounts(trades),
         totalRevenue: settled.reduce((sum, t) => sum + t.totalAmount, 0),
-        recent: trades.slice(0, 5).map(tradeView),
+        recent: await Promise.all(trades.slice(0, 5).map(tradeView)),
       },
     };
   }
 
   if (user.role === "BUYER") {
-    const offers = db.offers.listByBuyer(user.id);
-    const trades = db.trades.listByBuyer(user.id);
+    const [offers, trades] = await Promise.all([
+      db.offers.listByBuyer(user.id),
+      db.trades.listByBuyer(user.id),
+    ]);
     const settled = trades.filter((t) => t.status === "SETTLED");
 
     return {
@@ -51,22 +55,27 @@ export function buildDashboard(user: User) {
       offers: {
         total: offers.length,
         pending: offers.filter((o) => o.status === "PENDING").length,
-        recent: offers.slice(0, 5).map(offerView),
+        recent: await Promise.all(offers.slice(0, 5).map(offerView)),
       },
       trades: {
         active: trades.filter((t) => !TERMINAL.has(t.status)).length,
         byStatus: statusCounts(trades),
         totalSpent: settled.reduce((sum, t) => sum + t.totalAmount, 0),
-        recent: trades.slice(0, 5).map(tradeView),
+        recent: await Promise.all(trades.slice(0, 5).map(tradeView)),
       },
     };
   }
 
+  const [users, activeProducts, trades] = await Promise.all([
+    db.users.all(),
+    db.products.listActive(),
+    db.trades.listForUser(user.id),
+  ]);
   return {
     role: user.role,
     user: toPublicUser(user),
-    users: db.users.all().length,
-    products: db.products.listActive().length,
-    trades: db.trades.listForUser(user.id).length,
+    users: users.length,
+    products: activeProducts.length,
+    trades: trades.length,
   };
 }

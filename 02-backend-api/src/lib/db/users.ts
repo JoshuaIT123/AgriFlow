@@ -1,42 +1,80 @@
-import type { User } from "../types";
+import { pool } from "./pool";
+import { buildUpdate, toIso } from "./utils";
+import type { User, Role, UserStatus } from "../types";
 
-/**
- * In-memory repository for Users.
- *
- * NOTE: This is the backend-side data layer so the API is fully testable
- * before the Database/Integration team (Person 4) delivers their schema and
- * queries. The shape here is the contract we hand to them. Swap the internals
- * for real DB calls without changing the route handlers.
- */
+interface UserRow {
+  id: string;
+  name: string;
+  phone: string;
+  password_hash: string;
+  role: Role;
+  location: string | null;
+  status: UserStatus;
+  created_at: Date | string;
+}
+
+function rowToUser(r: UserRow): User {
+  return {
+    id: r.id,
+    name: r.name,
+    phone: r.phone,
+    passwordHash: r.password_hash,
+    role: r.role,
+    location: r.location ?? undefined,
+    status: r.status,
+    createdAt: toIso(r.created_at),
+  };
+}
+
+const UPDATE_COLUMNS = [
+  { col: "name", camel: "name" },
+  { col: "phone", camel: "phone" },
+  { col: "password_hash", camel: "passwordHash" },
+  { col: "role", camel: "role" },
+  { col: "location", camel: "location" },
+  { col: "status", camel: "status" },
+] as const;
+
 export class UserRepository {
-  private users = new Map<string, User>();
-
-  create(input: User): User {
-    this.users.set(input.id, input);
-    return input;
+  async create(input: User): Promise<User> {
+    const res = await pool.query(
+      `INSERT INTO users (id, name, phone, password_hash, role, location, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        input.id,
+        input.name,
+        input.phone,
+        input.passwordHash,
+        input.role,
+        input.location ?? null,
+        input.status,
+        input.createdAt,
+      ],
+    );
+    return rowToUser(res.rows[0] as UserRow);
   }
 
-  update(id: string, patch: Partial<User>): User | undefined {
-    const existing = this.users.get(id);
-    if (!existing) return undefined;
-    const updated = { ...existing, ...patch };
-    this.users.set(id, updated);
-    return updated;
+  async update(id: string, patch: Partial<User>): Promise<User | undefined> {
+    const q = buildUpdate("users", id, patch, UPDATE_COLUMNS);
+    if (!q) return this.findById(id);
+    const res = await pool.query(q.text, q.params);
+    return res.rows[0] ? rowToUser(res.rows[0] as UserRow) : undefined;
   }
 
-  findById(id: string): User | undefined {
-    return this.users.get(id);
+  async findById(id: string): Promise<User | undefined> {
+    const res = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
+    return res.rows[0] ? rowToUser(res.rows[0] as UserRow) : undefined;
   }
 
-  findByPhone(phone: string): User | undefined {
-    for (const user of this.users.values()) {
-      if (user.phone === phone) return user;
-    }
-    return undefined;
+  async findByPhone(phone: string): Promise<User | undefined> {
+    const res = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
+    return res.rows[0] ? rowToUser(res.rows[0] as UserRow) : undefined;
   }
 
-  all(): User[] {
-    return Array.from(this.users.values());
+  async all(): Promise<User[]> {
+    const res = await pool.query("SELECT * FROM users ORDER BY created_at DESC");
+    return (res.rows as UserRow[]).map(rowToUser);
   }
 }
 

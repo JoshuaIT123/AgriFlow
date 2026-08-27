@@ -15,10 +15,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
-  const trade = db.trades.findById(params.id);
+  const trade = await db.trades.findById(params.id);
   if (!trade) return notFound("Trade not found");
 
   if (trade.farmerId !== auth.user.id && auth.user.role !== "ADMIN") {
@@ -32,12 +32,12 @@ export async function POST(
   }
 
   const updated = transitionTrade(trade, "SETTLED");
-  db.trades.update(updated.id, updated);
+  await db.trades.update(updated.id, updated);
 
-  const [payment] = db.payments.findByTrade(trade.id);
+  const [payment] = await db.payments.findByTrade(trade.id);
   if (payment && payment.status === "PAID" && !payment.settledAt) {
-    db.payments.update(payment.id, { settledAt: new Date().toISOString() });
+    await db.payments.update(payment.id, { settledAt: new Date().toISOString() });
   }
 
-  return sendOk({ trade: tradeView(updated) });
+  return sendOk({ trade: await tradeView(updated) });
 }

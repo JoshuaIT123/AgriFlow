@@ -21,13 +21,13 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(_request);
+  const auth = await requireAuth(_request);
   if ("error" in auth) return auth.error;
 
-  const payment = db.payments.findById(params.id);
+  const payment = await db.payments.findById(params.id);
   if (!payment) return notFound("Payment not found");
 
-  const trade = db.trades.findById(payment.tradeId);
+  const trade = await db.trades.findById(payment.tradeId);
   if (!trade) return notFound("Trade not found");
 
   if (!canAccessTrade(auth.user, trade)) {
@@ -37,33 +37,33 @@ export async function GET(
   const result = await lightning.checkPayment(payment.paymentHash);
 
   if (result.failed && payment.status !== "FAILED") {
-    db.payments.update(payment.id, { status: "FAILED" });
+    await db.payments.update(payment.id, { status: "FAILED" });
     if (trade.status === "PAYMENT_PENDING") {
       const updated = transitionTrade(trade, "AGREED");
-      db.trades.update(updated.id, updated);
+      await db.trades.update(updated.id, updated);
       return sendOk({
-        payment: db.payments.findById(payment.id),
-        trade: tradeView(updated),
+        payment: await db.payments.findById(payment.id),
+        trade: await tradeView(updated),
       });
     }
   } else if (result.paid && payment.status !== "PAID") {
-    db.payments.update(payment.id, {
+    await db.payments.update(payment.id, {
       status: "PAID",
       paidAt: result.settledAt ?? new Date().toISOString(),
     });
     if (trade.status === "PAYMENT_PENDING") {
       const locked = transitionTrade(trade, "PAYMENT_LOCKED");
       const delivery = transitionTrade(locked, "DELIVERY_PENDING");
-      db.trades.update(delivery.id, delivery);
+      await db.trades.update(delivery.id, delivery);
       return sendOk({
-        payment: db.payments.findById(payment.id),
-        trade: tradeView(delivery),
+        payment: await db.payments.findById(payment.id),
+        trade: await tradeView(delivery),
       });
     }
   }
 
   return sendOk({
-    payment: db.payments.findById(payment.id),
-    trade: tradeView(trade),
+    payment: await db.payments.findById(payment.id),
+    trade: await tradeView(trade),
   });
 }

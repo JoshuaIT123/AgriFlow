@@ -13,10 +13,10 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(_request);
+  const auth = await requireAuth(_request);
   if ("error" in auth) return auth.error;
 
-  const user = db.users.findById(params.id);
+  const user = await db.users.findById(params.id);
   if (!user) return notFound("User not found");
 
   return sendOk({ user: toPublicUser(user) });
@@ -40,7 +40,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
   // Only the account owner (or an ADMIN) may update a profile.
@@ -48,7 +48,7 @@ export async function PATCH(
     return forbidden("You can only update your own profile");
   }
 
-  const target = db.users.findById(params.id);
+  const target = await db.users.findById(params.id);
   if (!target) return notFound("User not found");
 
   let body: unknown;
@@ -63,13 +63,13 @@ export async function PATCH(
   const { name, location, phone, password } = parsed.data;
 
   if (phone !== undefined && phone !== target.phone) {
-    const existing = db.users.findByPhone(phone);
+    const existing = await db.users.findByPhone(phone);
     if (existing && existing.id !== target.id) {
       return conflict("This phone number is already in use");
     }
   }
 
-  const updated = db.users.update(params.id, {
+  const updated = await db.users.update(params.id, {
     ...(name !== undefined ? { name } : {}),
     ...(location !== undefined ? { location: location || undefined } : {}),
     ...(phone !== undefined ? { phone } : {}),

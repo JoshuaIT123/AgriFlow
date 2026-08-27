@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { badRequest, forbidden, notFound, sendOk } from "@/lib/http";
 
@@ -11,10 +11,10 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(_request);
+  const auth = await requireAuth(_request);
   if ("error" in auth) return auth.error;
 
-  const product = db.products.findById(params.id);
+  const product = await db.products.findById(params.id);
   if (!product) return notFound("Product not found");
 
   // Deactivated products are only visible to their owner (or ADMIN).
@@ -43,10 +43,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
-  const product = db.products.findById(params.id);
+  const product = await db.products.findById(params.id);
   if (!product) return notFound("Product not found");
 
   if (product.farmerId !== auth.user.id && auth.user.role !== "ADMIN") {
@@ -63,7 +63,7 @@ export async function PATCH(
   const parsed = updateProductSchema.safeParse(body);
   if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
 
-  const updated = db.products.update(params.id, parsed.data);
+  const updated = await db.products.update(params.id, parsed.data);
   if (!updated) return notFound("Product not found");
 
   return sendOk({ product: updated });
@@ -77,17 +77,17 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(_request);
+  const auth = await requireAuth(_request);
   if ("error" in auth) return auth.error;
 
-  const product = db.products.findById(params.id);
+  const product = await db.products.findById(params.id);
   if (!product) return notFound("Product not found");
 
   if (product.farmerId !== auth.user.id && auth.user.role !== "ADMIN") {
     return forbidden("Only the product owner can deactivate this product");
   }
 
-  const updated = db.products.update(params.id, { status: "DEACTIVATED" });
+  const updated = await db.products.update(params.id, { status: "DEACTIVATED" });
   if (!updated) return notFound("Product not found");
 
   return sendOk({ product: updated });

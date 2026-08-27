@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/auth/me - current authenticated user (UC-03). */
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
   return sendOk({ user: toPublicUser(auth.user) });
 }

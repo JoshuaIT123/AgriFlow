@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   const { phone, password } = parsed.data;
 
-  const user = db.users.findByPhone(phone);
+  const user = await db.users.findByPhone(phone);
 
   // Generic error message on purpose: do not leak whether a phone number
   // exists in the system (prevents user enumeration).

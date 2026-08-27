@@ -19,7 +19,7 @@ const createOfferSchema = z.object({
  * The backend computes total_amount (business rule: never trust client money).
  */
 export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
   const roleErr = requireRole(auth.user, ["BUYER"]);
   if (roleErr) return roleErr;
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
   const { productId, quantity, price } = parsed.data;
 
-  const product = db.products.findById(productId);
+  const product = await db.products.findById(productId);
   if (!product || product.status !== "ACTIVE") {
     return notFound("Product not found or not available");
   }
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   // Backend always computes the money (never trust the frontend amount).
   const totalAmount = Math.round(quantity * price * 100) / 100;
 
-  const offer = db.offers.create({
+  const offer = await db.offers.create({
     id: randomUUID(),
     buyerId: auth.user.id,
     productId,
@@ -62,5 +62,5 @@ export async function POST(request: NextRequest) {
     createdAt: new Date().toISOString(),
   });
 
-  return sendOk({ offer: offerView(offer) }, 201);
+  return sendOk({ offer: await offerView(offer) }, 201);
 }

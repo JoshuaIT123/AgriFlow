@@ -11,15 +11,15 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = requireAuth(_request);
+  const auth = await requireAuth(_request);
   if ("error" in auth) return auth.error;
 
-  const trade = db.trades.findById(params.id);
+  const trade = await db.trades.findById(params.id);
   if (!trade) return notFound("Trade not found");
 
   if (!canAccessTrade(auth.user, trade)) {
     return forbidden("You do not have access to this trade");
   }
 
-  return sendOk({ trade: tradeView(trade) });
+  return sendOk({ trade: await tradeView(trade) });
 }

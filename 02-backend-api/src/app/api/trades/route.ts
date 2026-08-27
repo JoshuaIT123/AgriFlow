@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendOk } from "@/lib/http";
-import { tradeView } from "@/lib/services/views";
+import { tradeViews } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * the user participates in (as buyer or farmer).
  */
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
 
   const { searchParams } = new URL(request.url);
@@ -20,12 +20,12 @@ export async function GET(request: NextRequest) {
 
   let trades;
   if (role === "buyer") {
-    trades = db.trades.listByBuyer(auth.user.id);
+    trades = await db.trades.listByBuyer(auth.user.id);
   } else if (role === "farmer") {
-    trades = db.trades.listByFarmer(auth.user.id);
+    trades = await db.trades.listByFarmer(auth.user.id);
   } else {
-    trades = db.trades.listForUser(auth.user.id);
+    trades = await db.trades.listForUser(auth.user.id);
   }
 
-  return sendOk({ trades: trades.map(tradeView) });
+  return sendOk({ trades: await tradeViews(trades) });
 }
