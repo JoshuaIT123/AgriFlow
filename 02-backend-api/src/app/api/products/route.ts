@@ -3,8 +3,9 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { badRequest, forbidden, sendOk } from "@/lib/http";
+import { badRequest, sendDomainError, sendOk } from "@/lib/http";
 import { productView } from "@/lib/services/views";
+import { saveProductImage } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -17,25 +18,65 @@ const createProductSchema = z.object({
   quality: z.string().trim().max(120).optional().default(""),
 });
 
-/** POST /api/products - farmer creates a product (UC-06). */
+/** True when the client sent multipart/form-data (product + optional image). */
+function isMultipart(request: NextRequest): boolean {
+  return (request.headers.get("content-type") ?? "").includes("multipart/form-data");
+}
+
+/**
+ * POST /api/products - farmer creates a product (UC-06).
+ *
+ * Accepts either:
+ *   JSON:                    { name, quantity, unit, price, location, quality }
+ *   multipart/form-data:     same fields as form fields + optional `image` file
+ *
+ * The image (when present) is stored locally in uploads/products and exposed
+ * via product.imageUrl -> GET /api/products/:id/image.
+ */
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
   const roleErr = requireRole(auth.user, ["FARMER"]);
   if (roleErr) return roleErr;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequest("Invalid JSON body");
+  let parsed: ReturnType<typeof createProductSchema.safeParse>;
+  let imageFile: File | undefined;
+
+  if (isMultipart(request)) {
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      return badRequest("Invalid multipart body");
+    }
+    const entry = form.get("image");
+    if (entry instanceof File) imageFile = entry;
+    else if (typeof entry === "string" && entry.trim() !== "") {
+      return badRequest("The 'image' field must be a file upload");
+    }
+
+    parsed = createProductSchema.safeParse({
+      name: form.get("name"),
+      quantity: form.get("quantity"),
+      unit: form.get("unit"),
+      price: form.get("price"),
+      location: form.get("location"),
+      quality: form.get("quality") ?? "",
+    });
+  } else {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Invalid JSON body");
+    }
+    parsed = createProductSchema.safeParse(body);
   }
 
-  const parsed = createProductSchema.safeParse(body);
   if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
   const { name, quantity, unit, price, location, quality } = parsed.data;
 
-  const product = await db.products.create({
+  let product = await db.products.create({
     id: randomUUID(),
     farmerId: auth.user.id,
     name,
@@ -46,6 +87,16 @@ export async function POST(request: NextRequest) {
     quality,
     status: "ACTIVE",
   });
+
+  if (imageFile) {
+    try {
+      const imageUrl = await saveProductImage(product.id, imageFile);
+      const updated = await db.products.update(product.id, { imageUrl });
+      if (updated) product = updated;
+    } catch (err) {
+      return sendDomainError(err);
+    }
+  }
 
   return sendOk({ product: await productView(product) }, 201);
 }

@@ -1,27 +1,65 @@
 import { NextRequest } from "next/server";
-import { randomUUID } from "crypto";
 import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { badRequest, forbidden, sendOk } from "@/lib/http";
+import { badRequest, forbidden, notFound, sendOk } from "@/lib/http";
+import { productView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
-const createProductSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120, "Name too long"),
-  quantity: z.coerce.number().positive("Quantity must be greater than 0"),
-  unit: z.string().trim().min(1, "Unit is required").max(20),
-  price: z.coerce.number().positive("Price must be greater than 0"),
-  location: z.string().trim().min(1, "Location is required").max(200),
-  quality: z.string().trim().max(120).optional().default(""),
-});
+const updateProductSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(120, "Name too long"),
+    quantity: z.coerce.number().positive("Quantity must be greater than 0"),
+    unit: z.string().trim().min(1, "Unit is required").max(20),
+    price: z.coerce.number().positive("Price must be greater than 0"),
+    location: z.string().trim().min(1, "Location is required").max(200),
+    quality: z.string().trim().max(120),
+  })
+  .partial();
 
-/** POST /api/products - farmer creates a product (UC-06). */
-export async function POST(request: NextRequest) {
+/**
+ * GET /api/products/:id - product details (UC-08).
+ * ACTIVE products are visible to every authenticated user; deactivated ones
+ * only to their owner (or ADMIN).
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const auth = await requireAuth(_request);
+  if ("error" in auth) return auth.error;
+
+  const product = await db.products.findById(params.id);
+  if (!product) return notFound("Product not found");
+  if (
+    product.status !== "ACTIVE" &&
+    product.farmerId !== auth.user.id &&
+    auth.user.role !== "ADMIN"
+  ) {
+    return notFound("Product not found");
+  }
+
+  return sendOk({ product: await productView(product) });
+}
+
+/**
+ * PATCH /api/products/:id - farmer updates their product (UC-09).
+ * Only the product owner (or ADMIN). Status is intentionally not patchable -
+ * deactivation goes through DELETE to keep transitions explicit.
+ */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
   const auth = await requireAuth(request);
   if ("error" in auth) return auth.error;
-  const roleErr = requireRole(auth.user, ["FARMER"]);
-  if (roleErr) return roleErr;
+
+  const product = await db.products.findById(params.id);
+  if (!product) return notFound("Product not found");
+  if (product.farmerId !== auth.user.id && auth.user.role !== "ADMIN") {
+    return forbidden("Only the product owner can update the product");
+  }
 
   let body: unknown;
   try {
@@ -30,52 +68,35 @@ export async function POST(request: NextRequest) {
     return badRequest("Invalid JSON body");
   }
 
-  const parsed = createProductSchema.safeParse(body);
+  const parsed = updateProductSchema.safeParse(body);
   if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
-  const { name, quantity, unit, price, location, quality } = parsed.data;
 
-  const product = await db.products.create({
-    id: randomUUID(),
-    farmerId: auth.user.id,
-    name,
-    quantity,
-    unit,
-    price,
-    location,
-    quality,
-    status: "ACTIVE",
-  });
+  const updated = await db.products.update(product.id, parsed.data);
+  if (!updated) return notFound("Product not found");
 
-  return sendOk({ product }, 201);
+  return sendOk({ product: await productView(updated) });
 }
 
 /**
- * GET /api/products - browse products (UC-07).
- * Default lists ACTIVE products. ?mine=true lists the farmer's own products
- * (all statuses). Optional ?q= filters by name/location.
+ * DELETE /api/products/:id - deactivate a product (UC-10).
+ * Only the product owner (or ADMIN). Soft-delete: the product stays in the
+ * database (historical trades/offers keep working) but disappears from browse.
  */
-export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request);
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const auth = await requireAuth(_request);
   if ("error" in auth) return auth.error;
 
-  const { searchParams } = new URL(request.url);
-  const mine = searchParams.get("mine") === "true";
-  const q = searchParams.get("q")?.trim().toLowerCase();
-
-  let products;
-  if (mine) {
-    const roleErr = requireRole(auth.user, ["FARMER", "ADMIN"]);
-    if (roleErr) return roleErr;
-    products = auth.user.role === "ADMIN" ? await db.products.listActive() : await db.products.listByFarmer(auth.user.id);
-  } else {
-    products = await db.products.listActive();
+  const product = await db.products.findById(params.id);
+  if (!product) return notFound("Product not found");
+  if (product.farmerId !== auth.user.id && auth.user.role !== "ADMIN") {
+    return forbidden("Only the product owner can deactivate the product");
   }
 
-  if (q) {
-    products = products.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.location.toLowerCase().includes(q),
-    );
-  }
+  const updated = await db.products.update(product.id, { status: "DEACTIVATED" });
+  if (!updated) return notFound("Product not found");
 
-  return sendOk({ products });
+  return sendOk({ product: await productView(updated) });
 }

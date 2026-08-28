@@ -28,6 +28,8 @@ export interface Product {
   price: number;
   location: string;
   quality: string;
+  /** Public URL that serves the product photo (or undefined when none). */
+  imageUrl?: string;
   status: ProductStatus;
   createdAt: string;
 }

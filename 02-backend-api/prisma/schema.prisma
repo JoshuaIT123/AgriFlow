@@ -30,6 +30,7 @@ model Product {
   price     Float
   location  String
   quality   String
+  imageUrl  String?
   status    ProductStatus @default(ACTIVE)
   createdAt DateTime      @default(now())
   offers    Offer[]
