@@ -1,0 +1,530 @@
+From be5f11859ce98e47715c48f58bbddbbf773ed1b6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 27 Aug 2026 22:43:08 +0000
+Subject: [PATCH] feat(predictions): AI price and demand outlook via Hugging
+ Face
+
+Adds GET /api/predictions: it summarises the caller's live listings and the
+offers standing against them, asks the configured model for a fair price
+range and demand level per listing, and returns strict JSON.
+
+The token is read server-side from HF_TOKEN and never reaches the browser -
+a NEXT_PUBLIC_ prefix here would let anyone loading the page spend against
+the account. The frontend calls the backend, which holds the credential.
+
+Model output is treated as untrusted: the response is parsed defensively
+(fences stripped, JSON extracted), unknown product ids are dropped, prices
+are coerced to positive numbers falling back to the listing price, and
+demand is clamped to the known enum. Requests time out at 45s so a slow
+completion cannot pin a serverless invocation open. Nothing here writes to
+a product, offer or trade - it is advisory only, and the backend still
+computes every amount that matters.
+
+The dashboard panel fetches on demand rather than on mount, so rendering a
+dashboard does not fire a model call.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Kd2PAtGQ1cR37E5TuKocmv
+---
+ .../src/app/(buyer)/buyer/dashboard/page.tsx  |   2 +
+ .../app/(farmer)/farmer/dashboard/page.tsx    |   2 +
+ .../src/components/PredictionPanel.tsx        |  94 +++++++++
+ 01-frontend-lead/src/lib/api.ts               |  24 +++
+ 01-frontend-lead/src/lib/i18n.ts              |  22 ++
+ 02-backend-api/.env.example                   |   8 +-
+ .../src/app/api/predictions/route.ts          |  27 +++
+ 02-backend-api/src/lib/config.ts              |   9 +
+ .../src/lib/services/predictions.ts           | 197 ++++++++++++++++++
+ 9 files changed, 384 insertions(+), 1 deletion(-)
+ create mode 100644 01-frontend-lead/src/components/PredictionPanel.tsx
+ create mode 100644 02-backend-api/src/app/api/predictions/route.ts
+ create mode 100644 02-backend-api/src/lib/services/predictions.ts
+
+diff --git a/01-frontend-lead/src/app/(buyer)/buyer/dashboard/page.tsx b/01-frontend-lead/src/app/(buyer)/buyer/dashboard/page.tsx
+index a921380..66d67da 100644
+--- a/01-frontend-lead/src/app/(buyer)/buyer/dashboard/page.tsx
++++ b/01-frontend-lead/src/app/(buyer)/buyer/dashboard/page.tsx
+@@ -4,6 +4,7 @@ import Link from "next/link";
+ import { useMemo } from "react";
+ import { useAuth } from "@/lib/auth-context";
+ import { useI18n } from "@/lib/i18n-context";
++import { PredictionPanel } from "@/components/PredictionPanel";
+ import { useStoreVersion } from "@/lib/store-bus";
+ import {
+   getDealsForBuyer,
+@@ -155,6 +156,7 @@ export default function BuyerDashboard() {
+           ))
+         )}
+       </div>
++      <PredictionPanel />
+     </div>
+   );
+ }
+diff --git a/01-frontend-lead/src/app/(farmer)/farmer/dashboard/page.tsx b/01-frontend-lead/src/app/(farmer)/farmer/dashboard/page.tsx
+index d6446c8..5e7337e 100644
+--- a/01-frontend-lead/src/app/(farmer)/farmer/dashboard/page.tsx
++++ b/01-frontend-lead/src/app/(farmer)/farmer/dashboard/page.tsx
+@@ -14,6 +14,7 @@ import { formatDateShort, formatRwf } from "@/lib/format";
+ import { unitKey, unitOf } from "@/lib/units";
+ import { useMemo } from "react";
+ import { ProductBadge, OfferBadge, DealBadge } from "@/components/Badge";
++import { PredictionPanel } from "@/components/PredictionPanel";
+ 
+ export default function FarmerDashboard() {
+   const { user } = useAuth();
+@@ -157,6 +158,7 @@ export default function FarmerDashboard() {
+           ))
+         )}
+       </div>
++      <PredictionPanel />
+     </div>
+   );
+ }
+diff --git a/01-frontend-lead/src/components/PredictionPanel.tsx b/01-frontend-lead/src/components/PredictionPanel.tsx
+new file mode 100644
+index 0000000..5f5779a
+--- /dev/null
++++ b/01-frontend-lead/src/components/PredictionPanel.tsx
+@@ -0,0 +1,94 @@
++"use client";
++
++import { useCallback, useState } from "react";
++import { useI18n } from "@/lib/i18n-context";
++import { apiPredictions, type Predictions } from "@/lib/api";
++import { formatRwf } from "@/lib/format";
++
++/**
++ * AI market outlook.
++ *
++ * Fetched on demand rather than on mount: the model call takes seconds and
++ * costs a request, so a dashboard should not fire one every time it renders.
++ */
++export function PredictionPanel() {
++  const { t } = useI18n();
++  const [data, setData] = useState<Predictions | null>(null);
++  const [busy, setBusy] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  const load = useCallback(async () => {
++    setBusy(true);
++    setError(null);
++    try {
++      const res = await apiPredictions();
++      setData(res.predictions);
++    } catch (err) {
++      setError(err instanceof Error ? err.message : t("predict.error"));
++    } finally {
++      setBusy(false);
++    }
++  }, [t]);
++
++  const demandClass = (d: string) =>
++    d === "HIGH" ? "badge-ok" : d === "LOW" ? "badge-pending" : "badge-neutral";
++
++  return (
++    <div className="card" style={{ marginTop: 16 }}>
++      <div className="section-head" style={{ marginTop: 0 }}>
++        <div>
++          <h3 style={{ fontSize: 16, margin: 0 }}>{t("predict.title")}</h3>
++          <p className="subtle" style={{ margin: "4px 0 0" }}>
++            {t("predict.subtitle")}
++          </p>
++        </div>
++        <button className="btn btn-sm btn-secondary" onClick={load} disabled={busy}>
++          {busy ? t("predict.loading") : t("predict.run")}
++        </button>
++      </div>
++
++      {error && <div className="form-error">{error}</div>}
++
++      {data && (
++        <>
++          {data.summary && (
++            <p className="subtle" style={{ marginTop: 4 }}>
++              {data.summary}
++            </p>
++          )}
++
++          {data.forecasts.length === 0 ? (
++            <div className="empty">{t("predict.empty")}</div>
++          ) : (
++            data.forecasts.map((f) => (
++              <div className="tx-row" key={f.productId}>
++                <div className="tx-icon">📈</div>
++                <div className="tx-main">
++                  <div className="tx-title">{f.name}</div>
++                  <div className="tx-sub">{f.note}</div>
++                  <div style={{ marginTop: 6 }}>
++                    <span className={`badge ${demandClass(f.demand)}`}>
++                      {t(`predict.demand.${f.demand.toLowerCase()}`)}
++                    </span>
++                  </div>
++                </div>
++                <div className="tx-side">
++                  <div className="tx-amount mono">
++                    {formatRwf(f.suggestedMin)} – {formatRwf(f.suggestedMax)}
++                  </div>
++                  <div className="tx-sub" style={{ marginTop: 4 }}>
++                    {t("predict.now")} {formatRwf(f.currentPrice)}
++                  </div>
++                </div>
++              </div>
++            ))
++          )}
++
++          <p className="subtle" style={{ marginTop: 10, fontSize: 12 }}>
++            {t("predict.disclaimer")}
++          </p>
++        </>
++      )}
++    </div>
++  );
++}
+diff --git a/01-frontend-lead/src/lib/api.ts b/01-frontend-lead/src/lib/api.ts
+index 090dcd7..f3b4869 100644
+--- a/01-frontend-lead/src/lib/api.ts
++++ b/01-frontend-lead/src/lib/api.ts
+@@ -237,3 +237,27 @@ export function apiSettleTrade(tradeId: string): Promise<{ trade: ApiTrade }> {
+     method: "POST",
+   });
+ }
++
++/* ---------------- Predictions ---------------- */
++
++export interface ProductForecast {
++  productId: string;
++  name: string;
++  currentPrice: number;
++  suggestedMin: number;
++  suggestedMax: number;
++  demand: "LOW" | "STEADY" | "HIGH";
++  note: string;
++}
++
++export interface Predictions {
++  generatedAt: string;
++  model: string;
++  summary: string;
++  forecasts: ProductForecast[];
++}
++
++/** AI price/demand outlook. The HF token stays server-side on the backend. */
++export function apiPredictions(): Promise<{ predictions: Predictions }> {
++  return request<{ predictions: Predictions }>("/api/predictions");
++}
+diff --git a/01-frontend-lead/src/lib/i18n.ts b/01-frontend-lead/src/lib/i18n.ts
+index f37a5c8..11b370b 100644
+--- a/01-frontend-lead/src/lib/i18n.ts
++++ b/01-frontend-lead/src/lib/i18n.ts
+@@ -64,6 +64,17 @@ export const translations: Record<Locale, Dict> = {
+     "auth.err.password": "Passwords do not match.",
+     "auth.err.phone": "Please enter a valid phone number.",
+     "auth.err.login": "No account found with that phone and password. Try again or create an account.",
++    "predict.title": "Market outlook (AI)",
++    "predict.subtitle": "Suggested price ranges and demand, from live listings and offers.",
++    "predict.run": "Analyse",
++    "predict.loading": "Analysing...",
++    "predict.empty": "Nothing to analyse yet. Post a listing first.",
++    "predict.error": "Could not get predictions. Try again.",
++    "predict.now": "Listed at",
++    "predict.demand.low": "Low demand",
++    "predict.demand.steady": "Steady demand",
++    "predict.demand.high": "High demand",
++    "predict.disclaimer": "AI estimate only. You set the final price.",
+     "auth.err.register": "Could not create the account. That phone number may already be registered.",
+ 
+     /* Farmer nav + labels */
+@@ -301,6 +312,17 @@ export const translations: Record<Locale, Dict> = {
+     "auth.err.password": "Aya mambobanga ntabwo ahuza.",
+     "auth.err.phone": "Shyiramo nomero ya telefoni ikwiye.",
+     "auth.err.login": "Nta konte ibonetse n'iyo nomero n'ijambobanga. Ongera ugerageze cyangwa ufungure konte.",
++    "predict.title": "Isesengura ry'isoko (AI)",
++    "predict.subtitle": "Ibiciro byifuzwa n'icyifuzo, bishingiye ku bicuruzwa n'ibyifuzo biriho.",
++    "predict.run": "Sesengura",
++    "predict.loading": "Birimo gusesengurwa...",
++    "predict.empty": "Nta kintu cyo gusesengura. Banza ushyireho igicuruzwa.",
++    "predict.error": "Ntibyashobotse kubona isesengura. Ongera ugerageze.",
++    "predict.now": "Cyashyizweho kuri",
++    "predict.demand.low": "Icyifuzo gike",
++    "predict.demand.steady": "Icyifuzo gihoraho",
++    "predict.demand.high": "Icyifuzo kinini",
++    "predict.disclaimer": "Ni isesengura rya AI gusa. Igiciro cya nyuma ni wowe ugishyiraho.",
+     "auth.err.register": "Konte ntiyashoboye gufungurwa. Iyi nomero ishobora kuba isanzwe yanditse.",
+ 
+     "farmer.nav.dashboard": "Urubuga rw'ibanze",
+diff --git a/02-backend-api/.env.example b/02-backend-api/.env.example
+index 180ee37..b70c83a 100644
+--- a/02-backend-api/.env.example
++++ b/02-backend-api/.env.example
+@@ -10,4 +10,10 @@ DATABASE_URL=postgres://postgres:YOURPASSWORD@localhost:5732/agriflow
+ 
+ # RWF -> millisatoshis for the Lightning layer (contract mock)
+ MSAT_PER_RWF=10
+-LIGHTNING_MOCK_MODE=autopay
+\ No newline at end of file
++LIGHTNING_MOCK_MODE=autopay
++
++# Hugging Face router - market predictions (server-only secret).
++# Never expose these with a NEXT_PUBLIC_ prefix.
++HF_TOKEN=hf_xxx
++HF_MODEL=openai/gpt-oss-120b:cerebras
++HF_BASE_URL=https://router.huggingface.co/v1
+diff --git a/02-backend-api/src/app/api/predictions/route.ts b/02-backend-api/src/app/api/predictions/route.ts
+new file mode 100644
+index 0000000..b9687ee
+--- /dev/null
++++ b/02-backend-api/src/app/api/predictions/route.ts
+@@ -0,0 +1,27 @@
++import { NextRequest } from "next/server";
++import { requireAuth } from "@/lib/auth";
++import { DomainError } from "@/lib/errors";
++import { sendError, sendOk } from "@/lib/http";
++import { buildPredictions } from "@/lib/services/predictions";
++
++export const dynamic = "force-dynamic";
++// Model calls are slow; give the function room beyond the default.
++export const maxDuration = 60;
++
++/**
++ * GET /api/predictions - AI price and demand outlook for the caller.
++ *
++ * Farmers get an outlook on their own listings, buyers on the whole active
++ * market. Advisory only: nothing here writes to a product, offer or trade.
++ */
++export async function GET(request: NextRequest) {
++  const auth = await requireAuth(request);
++  if ("error" in auth) return auth.error;
++
++  try {
++    return sendOk({ predictions: await buildPredictions(auth.user) });
++  } catch (err) {
++    if (err instanceof DomainError) return sendError(err.message, err.status);
++    throw err;
++  }
++}
+diff --git a/02-backend-api/src/lib/config.ts b/02-backend-api/src/lib/config.ts
+index 7bae456..10d111f 100644
+--- a/02-backend-api/src/lib/config.ts
++++ b/02-backend-api/src/lib/config.ts
+@@ -6,6 +6,15 @@ export const config = {
+   /** PostgreSQL connection string. */
+   databaseUrl:
+     process.env.DATABASE_URL ?? "postgres://postgres@localhost:5432/agriflow",
++  /*
++   * Hugging Face router credentials for market predictions. The token is a
++   * server-only secret: it must never be exposed with a NEXT_PUBLIC_ prefix,
++   * or anyone loading the page could spend against it.
++   */
++  hfToken: process.env.HF_TOKEN ?? "",
++  hfModel: process.env.HF_MODEL ?? "openai/gpt-oss-120b:cerebras",
++  hfBaseUrl:
++    process.env.HF_BASE_URL ?? "https://router.huggingface.co/v1",
+ };
+ 
+ // Default role allowed at registration. Admin users are seeded/epic not public.
+diff --git a/02-backend-api/src/lib/services/predictions.ts b/02-backend-api/src/lib/services/predictions.ts
+new file mode 100644
+index 0000000..fd08a22
+--- /dev/null
++++ b/02-backend-api/src/lib/services/predictions.ts
+@@ -0,0 +1,197 @@
++import { config } from "../config";
++import { db } from "../db";
++import { DomainError } from "../errors";
++import type { Product, User } from "../types";
++
++/**
++ * Market predictions via the Hugging Face router.
++ *
++ * The model never sees the database: it is handed a compact, anonymised
++ * summary of live listings and recent offers, and asked to return strict
++ * JSON. Everything it produces is advisory - prices, quantities and trades
++ * are still computed by the backend, so a bad completion cannot move money.
++ */
++
++export interface ProductForecast {
++  productId: string;
++  name: string;
++  currentPrice: number;
++  suggestedMin: number;
++  suggestedMax: number;
++  demand: "LOW" | "STEADY" | "HIGH";
++  note: string;
++}
++
++export interface PredictionResult {
++  generatedAt: string;
++  model: string;
++  summary: string;
++  forecasts: ProductForecast[];
++}
++
++interface OfferStat {
++  count: number;
++  avg: number;
++  best: number;
++}
++
++/** Offer pressure per product: how many bids, and at what prices. */
++async function offerStats(products: Product[]): Promise<Map<string, OfferStat>> {
++  const offers = await db.offers.listForProducts(products.map((p) => p.id));
++  const stats = new Map<string, OfferStat>();
++  for (const o of offers) {
++    const s = stats.get(o.productId) ?? { count: 0, avg: 0, best: 0 };
++    s.avg = (s.avg * s.count + o.price) / (s.count + 1);
++    s.count += 1;
++    s.best = Math.max(s.best, o.price);
++    stats.set(o.productId, s);
++  }
++  return stats;
++}
++
++function buildPrompt(products: Product[], stats: Map<string, OfferStat>): string {
++  const rows = products.map((p) => {
++    const s = stats.get(p.id);
++    return {
++      productId: p.id,
++      name: p.name,
++      category: p.quality || "Other",
++      location: p.location,
++      unit: p.unit,
++      askingPrice: p.price,
++      availableQuantity: p.quantity,
++      offers: s ? { count: s.count, averageOffer: Math.round(s.avg), bestOffer: s.best } : null,
++    };
++  });
++
++  return [
++    "You are an agricultural market analyst for Rwanda. All prices are RWF per unit.",
++    "For each listing below, estimate a fair selling price range and demand level.",
++    "Base demand on offer count and how offers compare to the asking price.",
++    "",
++    "Return ONLY valid JSON, no markdown fence, in exactly this shape:",
++    '{"summary":"<one sentence on the overall market>","forecasts":[' +
++      '{"productId":"<id>","suggestedMin":<number>,"suggestedMax":<number>,' +
++      '"demand":"LOW|STEADY|HIGH","note":"<max 12 words>"}]}',
++    "",
++    "Listings:",
++    JSON.stringify(rows),
++  ].join("\n");
++}
++
++/** Pulls the JSON object out of a completion that may be fenced or prefixed. */
++function parseModelJson(raw: string): { summary?: string; forecasts?: unknown[] } {
++  const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
++  const start = cleaned.indexOf("{");
++  const end = cleaned.lastIndexOf("}");
++  if (start === -1 || end === -1) {
++    throw new DomainError(502, "Prediction model returned an unreadable response");
++  }
++  try {
++    return JSON.parse(cleaned.slice(start, end + 1));
++  } catch {
++    throw new DomainError(502, "Prediction model returned invalid JSON");
++  }
++}
++
++function clampNumber(value: unknown, fallback: number): number {
++  const n = Number(value);
++  return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback;
++}
++
++function clampDemand(value: unknown): ProductForecast["demand"] {
++  return value === "LOW" || value === "HIGH" ? value : "STEADY";
++}
++
++/**
++ * Builds forecasts for the listings relevant to this user: a farmer's own
++ * products, or the whole active market for a buyer.
++ */
++export async function buildPredictions(user: User): Promise<PredictionResult> {
++  if (!config.hfToken) {
++    throw new DomainError(503, "Predictions are not configured (HF_TOKEN is unset)");
++  }
++
++  const products =
++    user.role === "FARMER"
++      ? await db.products.listByFarmer(user.id)
++      : await db.products.listActive();
++
++  if (products.length === 0) {
++    return {
++      generatedAt: new Date().toISOString(),
++      model: config.hfModel,
++      summary: "No active listings to analyse yet.",
++      forecasts: [],
++    };
++  }
++
++  // Keep the prompt bounded: newest listings first, capped.
++  const considered = products.slice(0, 20);
++  const stats = await offerStats(considered);
++
++  let res: Response;
++  try {
++    res = await fetch(`${config.hfBaseUrl}/chat/completions`, {
++      method: "POST",
++      headers: {
++        Authorization: `Bearer ${config.hfToken}`,
++        "Content-Type": "application/json",
++      },
++      body: JSON.stringify({
++        model: config.hfModel,
++        temperature: 0.2,
++        max_tokens: 1200,
++        messages: [{ role: "user", content: buildPrompt(considered, stats) }],
++      }),
++      // A slow model must not hold a serverless invocation open indefinitely.
++      signal: AbortSignal.timeout(45_000),
++    });
++  } catch {
++    throw new DomainError(504, "Prediction service did not respond in time");
++  }
++
++  if (!res.ok) {
++    const detail = await res.text().catch(() => "");
++    throw new DomainError(
++      502,
++      `Prediction service error (${res.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`,
++    );
++  }
++
++  const payload = (await res.json()) as {
++    choices?: { message?: { content?: string } }[];
++  };
++  const content = payload.choices?.[0]?.message?.content;
++  if (!content) {
++    throw new DomainError(502, "Prediction model returned an empty response");
++  }
++
++  const parsed = parseModelJson(content);
++  const byId = new Map(considered.map((p) => [p.id, p]));
++
++  const forecasts: ProductForecast[] = [];
++  for (const entry of Array.isArray(parsed.forecasts) ? parsed.forecasts : []) {
++    const f = entry as Record<string, unknown>;
++    const product = byId.get(String(f.productId));
++    if (!product) continue; // ignore ids the model invented
++    const min = clampNumber(f.suggestedMin, product.price);
++    const max = clampNumber(f.suggestedMax, product.price);
++    forecasts.push({
++      productId: product.id,
++      name: product.name,
++      currentPrice: product.price,
++      suggestedMin: Math.min(min, max),
++      suggestedMax: Math.max(min, max),
++      demand: clampDemand(f.demand),
++      note: String(f.note ?? "").slice(0, 120),
++    });
++  }
++
++  return {
++    generatedAt: new Date().toISOString(),
++    model: config.hfModel,
++    summary: String(parsed.summary ?? "").slice(0, 300),
++    forecasts,
++  };
++}
+-- 
+2.43.0
+
