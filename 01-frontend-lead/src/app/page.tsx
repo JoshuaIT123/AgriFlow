@@ -207,6 +207,12 @@ export default function Home() {
             >
               Sign in
             </Link>
+            <Link
+              href="/ussd"
+              className="rounded-xl border border-white/40 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+            >
+              📱 Try USSD (*789#)
+            </Link>
           </div>
 
           <div className="mt-14 grid w-full max-w-2xl grid-cols-3 gap-4 rounded-2xl bg-white/10 p-4 backdrop-blur sm:p-6">
