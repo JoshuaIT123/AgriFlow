@@ -1,9 +1,10 @@
-import type { Metadata, Viewport } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppProviders } from "@/lib/providers";
+import WandaaChat from "@/components/WandaaChat";
 
 export const metadata: Metadata = {
-  title: "AgriFlow — Farming, paid on delivery",
+  title: "AgriFlow â€” Farming, paid on delivery",
   description:
     "A secure, simple platform that pays farmers reliably through Mobile Money.",
   applicationName: "AgriFlow",
@@ -28,8 +29,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AppProviders>{children}</AppProviders>
+        <AppProviders>{children}<WandaaChat /></AppProviders>
       </body>
     </html>
   );
 }
+

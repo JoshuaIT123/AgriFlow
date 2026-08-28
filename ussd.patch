@@ -1,0 +1,615 @@
+From c81957233a992d6d5e4fb3870fcc9867b31728ed Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 28 Aug 2026 07:08:36 +0000
+Subject: [PATCH] feat(ussd): feature-phone USSD simulator for live demos
+
+Most smallholders in Rwanda reach services on a 2G feature phone over
+USSD, not a smartphone app, so the pitch needs to show that entry point
+rather than assert it.
+
+Adds /ussd: a phone frame with a working keypad and a green LCD running a
+*789# session - language choice first (English / Kinyarwanda), then sell
+produce, market prices, offers with accept/reject, and wallet balance,
+ending in a handoff button into the web app.
+
+The session model mirrors a real gateway: resolveScreen is a pure function
+of (locale, accumulated input) returning CON to continue or END to close,
+so any step can be replayed or rewound mid-presentation, and 0 walks back
+a level the way real menus do. Swapping the simulated transport for an
+actual gateway would not change the menu code.
+
+The keypad is clickable for stage use and mirrored to the physical
+keyboard, so a presenter can drive it without hunting for buttons.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Kd2PAtGQ1cR37E5TuKocmv
+---
+ 01-frontend-lead/src/app/page.tsx             |   6 +
+ 01-frontend-lead/src/app/ussd/page.tsx        |  26 ++
+ 01-frontend-lead/src/components/UssdPhone.tsx | 297 ++++++++++++++++++
+ 01-frontend-lead/src/lib/ussd.ts              | 219 +++++++++++++
+ 4 files changed, 548 insertions(+)
+ create mode 100644 01-frontend-lead/src/app/ussd/page.tsx
+ create mode 100644 01-frontend-lead/src/components/UssdPhone.tsx
+ create mode 100644 01-frontend-lead/src/lib/ussd.ts
+
+diff --git a/01-frontend-lead/src/app/page.tsx b/01-frontend-lead/src/app/page.tsx
+index 76609c4..6920528 100644
+--- a/01-frontend-lead/src/app/page.tsx
++++ b/01-frontend-lead/src/app/page.tsx
+@@ -192,6 +192,12 @@ export default function Home() {
+             >
+               Sign in
+             </Link>
++            <Link
++              href="/ussd"
++              className="rounded-xl border border-white/40 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
++            >
++              📱 Try USSD (*789#)
++            </Link>
+           </div>
+ 
+           <div className="mt-14 grid w-full max-w-2xl grid-cols-3 gap-4 rounded-2xl bg-white/10 p-4 backdrop-blur sm:p-6">
+diff --git a/01-frontend-lead/src/app/ussd/page.tsx b/01-frontend-lead/src/app/ussd/page.tsx
+new file mode 100644
+index 0000000..6b44097
+--- /dev/null
++++ b/01-frontend-lead/src/app/ussd/page.tsx
+@@ -0,0 +1,26 @@
++import Link from "next/link";
++import { UssdPhone } from "@/components/UssdPhone";
++
++export const metadata = {
++  title: "AgriFlow — USSD demo",
++  description: "Feature-phone USSD access to the AgriFlow marketplace.",
++};
++
++export default function UssdPage() {
++  return (
++    <div className="container" style={{ paddingTop: 24 }}>
++      <div className="section-head" style={{ marginTop: 0 }}>
++        <div>
++          <h1 style={{ fontSize: 22, margin: 0 }}>AgriFlow over USSD</h1>
++          <p className="subtle" style={{ margin: "4px 0 0" }}>
++            The same marketplace, on a 2G feature phone.
++          </p>
++        </div>
++        <Link className="btn btn-ghost btn-sm" href="/">
++          ← Home
++        </Link>
++      </div>
++      <UssdPhone />
++    </div>
++  );
++}
+diff --git a/01-frontend-lead/src/components/UssdPhone.tsx b/01-frontend-lead/src/components/UssdPhone.tsx
+new file mode 100644
+index 0000000..54dd29e
+--- /dev/null
++++ b/01-frontend-lead/src/components/UssdPhone.tsx
+@@ -0,0 +1,297 @@
++"use client";
++
++import { useCallback, useEffect, useMemo, useState } from "react";
++import { useRouter } from "next/navigation";
++import {
++  expectsFreeText,
++  resolveScreen,
++  USSD_CODE,
++  type UssdState,
++} from "@/lib/ussd";
++import type { Locale } from "@/lib/types";
++
++/*
++ * Feature-phone USSD simulator for live demos.
++ *
++ * Most Rwandan smallholders reach services on a feature phone over USSD, not
++ * a smartphone app, so the pitch needs to show that entry point. The keypad
++ * is clickable for stage use and mirrored to the physical keyboard so a
++ * presenter can drive it without hunting for buttons.
++ */
++
++type Phase = "dial" | "session";
++
++const KEYS = [
++  ["1", "2", "3"],
++  ["4", "5", "6"],
++  ["7", "8", "9"],
++  ["*", "0", "#"],
++];
++
++export function UssdPhone() {
++  const router = useRouter();
++  const [phase, setPhase] = useState<Phase>("dial");
++  const [dial, setDial] = useState("");
++  const [input, setInput] = useState("");
++  const [state, setState] = useState<UssdState>({ path: [], locale: null });
++
++  const screen = useMemo(() => resolveScreen(state), [state]);
++  const freeText = expectsFreeText(state);
++  const ended = phase === "session" && screen.kind === "END";
++
++  const reset = useCallback(() => {
++    setPhase("dial");
++    setDial("");
++    setInput("");
++    setState({ path: [], locale: null });
++  }, []);
++
++  const call = useCallback(() => {
++    if (dial.replace(/\s/g, "") !== USSD_CODE) return;
++    setPhase("session");
++    setInput("");
++  }, [dial]);
++
++  const send = useCallback(() => {
++    const value = input.trim();
++    if (!value) return;
++    setInput("");
++
++    // First reply picks the language; it is not part of the menu path.
++    if (state.locale === null) {
++      const locale: Locale | null =
++        value === "1" ? "en" : value === "2" ? "rw" : null;
++      if (locale) setState({ path: [], locale });
++      return;
++    }
++
++    // 0 goes back one level, matching how real menus behave.
++    if (value === "0" && !freeText) {
++      setState((s) => ({ ...s, path: s.path.slice(0, -1) }));
++      return;
++    }
++
++    setState((s) => ({ ...s, path: [...s.path, value] }));
++  }, [input, state.locale, freeText]);
++
++  const press = useCallback(
++    (key: string) => {
++      if (phase === "dial") setDial((d) => (d.length < 12 ? d + key : d));
++      else setInput((i) => (i.length < 16 ? i + key : i));
++    },
++    [phase],
++  );
++
++  const backspace = useCallback(() => {
++    if (phase === "dial") setDial((d) => d.slice(0, -1));
++    else setInput((i) => i.slice(0, -1));
++  }, [phase]);
++
++  // Keyboard mirroring: a presenter can type instead of clicking.
++  useEffect(() => {
++    const onKey = (e: KeyboardEvent) => {
++      if (/^[0-9*#]$/.test(e.key)) press(e.key);
++      else if (e.key === "Backspace") backspace();
++      else if (e.key === "Enter") phase === "dial" ? call() : send();
++    };
++    window.addEventListener("keydown", onKey);
++    return () => window.removeEventListener("keydown", onKey);
++  }, [press, backspace, call, send, phase]);
++
++  const dialReady = dial.replace(/\s/g, "") === USSD_CODE;
++
++  return (
++    <div style={S.wrap}>
++      <div style={S.phone}>
++        <div style={S.speaker} />
++
++        <div style={S.screen}>
++          <div style={S.statusBar}>
++            <span>MTN RW</span>
++            <span>▮▮▮ 2G</span>
++          </div>
++
++          {phase === "dial" ? (
++            <div style={S.lcd}>
++              <div style={S.lcdTitle}>Dial USSD</div>
++              <div style={S.dialText}>{dial || <span style={S.hint}>{USSD_CODE}</span>}</div>
++              <div style={S.lcdBody}>
++                {dialReady ? "Press CALL" : `Type ${USSD_CODE}`}
++              </div>
++            </div>
++          ) : (
++            <div style={S.lcd}>
++              <div style={S.lcdTitle}>{screen.title}</div>
++              <div style={S.lcdBody}>
++                {screen.body.map((line, i) => (
++                  <div key={i}>{line || " "}</div>
++                ))}
++              </div>
++              {!ended && (
++                <div style={S.replyRow}>
++                  <span style={S.replyLabel}>{freeText ? "Input:" : "Reply:"}</span>
++                  <span style={S.replyValue}>{input}<span style={S.caret}>_</span></span>
++                </div>
++              )}
++              {ended && <div style={S.ended}>— session ended —</div>}
++            </div>
++          )}
++        </div>
++
++        <div style={S.keypad}>
++          {KEYS.map((row, ri) => (
++            <div key={ri} style={S.keyRow}>
++              {row.map((k) => (
++                <button key={k} style={S.key} onClick={() => press(k)} aria-label={`Key ${k}`}>
++                  {k}
++                </button>
++              ))}
++            </div>
++          ))}
++
++          <div style={S.keyRow}>
++            {phase === "dial" ? (
++              <button
++                style={{ ...S.action, ...S.call, ...(dialReady ? {} : S.disabled) }}
++                onClick={call}
++                disabled={!dialReady}
++              >
++                CALL
++              </button>
++            ) : ended ? (
++              <button style={{ ...S.action, ...S.call }} onClick={reset}>
++                RESTART
++              </button>
++            ) : (
++              <button style={{ ...S.action, ...S.call }} onClick={send}>
++                SEND
++              </button>
++            )}
++            <button style={{ ...S.action, ...S.clear }} onClick={backspace}>
++              DEL
++            </button>
++            <button style={{ ...S.action, ...S.end }} onClick={reset}>
++              END
++            </button>
++          </div>
++        </div>
++      </div>
++
++      <div style={S.side}>
++        <h2 style={{ margin: 0, fontSize: 18 }}>USSD — no smartphone needed</h2>
++        <p className="subtle" style={{ marginTop: 6 }}>
++          Most smallholders in Rwanda reach services on a feature phone. Dial{" "}
++          <strong>{USSD_CODE}</strong>, pick a language, and list produce, check
++          prices or accept an offer — the same marketplace, over 2G.
++        </p>
++        <ol className="subtle" style={{ paddingLeft: 18, lineHeight: 1.9 }}>
++          <li>Type <strong>{USSD_CODE}</strong> and press CALL</li>
++          <li>Choose <strong>1</strong> English or <strong>2</strong> Kinyarwanda</li>
++          <li>Try <strong>1</strong> sell, <strong>2</strong> prices, <strong>3</strong> offers</li>
++          <li><strong>0</strong> goes back, <strong>5</strong> opens the app</li>
++        </ol>
++        {screen.handoff && (
++          <button
++            className="btn btn-primary btn-block"
++            onClick={() => router.push("/register")}
++          >
++            Continue to AgriFlow →
++          </button>
++        )}
++        <p className="subtle" style={{ fontSize: 12, marginTop: 12 }}>
++          Simulation for demonstration. The keypad also responds to your
++          keyboard.
++        </p>
++      </div>
++    </div>
++  );
++}
++
++const S: Record<string, React.CSSProperties> = {
++  wrap: {
++    display: "flex",
++    flexWrap: "wrap",
++    gap: 28,
++    alignItems: "flex-start",
++    justifyContent: "center",
++    padding: "8px 0 32px",
++  },
++  phone: {
++    width: 300,
++    background: "linear-gradient(180deg,#1f2937,#111827)",
++    borderRadius: 28,
++    padding: 16,
++    boxShadow: "0 18px 40px rgba(0,0,0,.35)",
++    border: "1px solid #374151",
++    flexShrink: 0,
++  },
++  speaker: {
++    width: 56,
++    height: 5,
++    borderRadius: 3,
++    background: "#374151",
++    margin: "2px auto 12px",
++  },
++  screen: {
++    background: "#0f172a",
++    borderRadius: 12,
++    border: "1px solid #334155",
++    padding: 10,
++    marginBottom: 14,
++  },
++  statusBar: {
++    display: "flex",
++    justifyContent: "space-between",
++    color: "#64748b",
++    fontFamily: "ui-monospace, monospace",
++    fontSize: 10,
++    marginBottom: 8,
++  },
++  lcd: {
++    background: "#0b1220",
++    border: "1px solid #1e293b",
++    borderRadius: 8,
++    padding: 12,
++    minHeight: 190,
++    fontFamily: "ui-monospace, monospace",
++    color: "#86efac",
++    fontSize: 13,
++    lineHeight: 1.55,
++  },
++  lcdTitle: { color: "#fde68a", fontWeight: 700, marginBottom: 8 },
++  lcdBody: { whiteSpace: "pre-wrap" },
++  dialText: { fontSize: 22, letterSpacing: 2, margin: "18px 0" },
++  hint: { color: "#334155" },
++  replyRow: { marginTop: 12, display: "flex", gap: 6, color: "#e2e8f0" },
++  replyLabel: { color: "#64748b" },
++  replyValue: { color: "#fff" },
++  caret: { opacity: 0.7 },
++  ended: { marginTop: 12, color: "#64748b" },
++  keypad: { display: "grid", gap: 8 },
++  keyRow: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 },
++  key: {
++    background: "#1f2937",
++    color: "#e5e7eb",
++    border: "1px solid #374151",
++    borderRadius: 10,
++    padding: "12px 0",
++    fontSize: 17,
++    fontFamily: "ui-monospace, monospace",
++    cursor: "pointer",
++  },
++  action: {
++    border: "none",
++    borderRadius: 10,
++    padding: "12px 0",
++    fontSize: 12,
++    fontWeight: 700,
++    letterSpacing: 0.6,
++    cursor: "pointer",
++    color: "#fff",
++  },
++  call: { background: "#16a34a" },
++  clear: { background: "#475569" },
++  end: { background: "#b91c1c" },
++  disabled: { opacity: 0.45, cursor: "not-allowed" },
++  side: { maxWidth: 360, minWidth: 260, flex: 1 },
++};
+diff --git a/01-frontend-lead/src/lib/ussd.ts b/01-frontend-lead/src/lib/ussd.ts
+new file mode 100644
+index 0000000..08ac200
+--- /dev/null
++++ b/01-frontend-lead/src/lib/ussd.ts
+@@ -0,0 +1,219 @@
++import type { Locale } from "./types";
++
++/*
++ * USSD session model for the demo.
++ *
++ * A real gateway is stateless per request: the network sends the accumulated
++ * input string and the service replies with either CON (menu continues) or
++ * END (session closes). This mirrors that shape so the flow shown on stage is
++ * the same flow a gateway would drive - only the transport is faked.
++ */
++
++export type UssdKind = "CON" | "END";
++
++export interface UssdScreen {
++  kind: UssdKind;
++  title: string;
++  body: string[];
++  /** Set when the screen hands off to the web app. */
++  handoff?: boolean;
++}
++
++export interface UssdState {
++  /** Menu path so far, e.g. ["1", "2"]. */
++  path: string[];
++  locale: Locale | null;
++}
++
++const T = {
++  en: {
++    welcome: "AgriFlow",
++    chooseLang: ["1. English", "2. Kinyarwanda"],
++    main: "AgriFlow Main Menu",
++    mainItems: [
++      "1. Sell produce",
++      "2. Market prices",
++      "3. My offers",
++      "4. Wallet balance",
++      "5. Open AgriFlow app",
++    ],
++    sell: "Choose produce",
++    sellItems: ["1. Irish potatoes", "2. Maize", "3. Beans", "4. Coffee"],
++    qty: "Enter quantity (kg)",
++    price: "Enter price per kg (RWF)",
++    listed: "Listed on AgriFlow.",
++    listedBody: [
++      "Buyers in Kigali can",
++      "see it now.",
++      "SMS confirmation sent.",
++    ],
++    prices: "Market prices today",
++    priceItems: [
++      "Irish potatoes 1,800/kg",
++      "Maize          1,200/kg",
++      "Beans          2,000/kg",
++      "Coffee         6,000/kg",
++    ],
++    offers: "Offer received",
++    offerItems: [
++      "Cafe du Rift",
++      "100kg coffee @ 6,200",
++      "Total: 620,000 RWF",
++      "",
++      "1. Accept   2. Reject",
++    ],
++    accepted: "Offer accepted.",
++    acceptedBody: [
++      "Buyer will pay over",
++      "Bitcoin Lightning.",
++      "Funds held until you",
++      "confirm delivery.",
++    ],
++    rejected: "Offer rejected.",
++    rejectedBody: ["The buyer has been", "notified."],
++    wallet: "Wallet balance",
++    walletItems: [
++      "Available: 610,000 RWF",
++      "In escrow:  240,000 RWF",
++      "",
++      "Paid via Lightning.",
++    ],
++    handoff: "Opening AgriFlow...",
++    handoffBody: ["Continue on the app", "for the full marketplace."],
++    invalid: "Invalid choice.",
++    invalidBody: ["Please try again."],
++    back: "0. Back",
++  },
++  rw: {
++    welcome: "AgriFlow",
++    chooseLang: ["1. Icyongereza", "2. Ikinyarwanda"],
++    main: "Urutonde rwa AgriFlow",
++    mainItems: [
++      "1. Kugurisha umusaruro",
++      "2. Ibiciro by'isoko",
++      "3. Ibyifuzo byanjye",
++      "4. Amafaranga",
++      "5. Fungura porogaramu",
++    ],
++    sell: "Hitamo umusaruro",
++    sellItems: ["1. Ibirayi", "2. Ibigori", "3. Ibishyimbo", "4. Ikawa"],
++    qty: "Andika ingano (kg)",
++    price: "Andika igiciro kuri kg (RWF)",
++    listed: "Byashyizwe ku isoko.",
++    listedBody: [
++      "Abaguzi bo mu Kigali",
++      "barabibona nonaha.",
++      "SMS yoherejwe.",
++    ],
++    prices: "Ibiciro by'uyu munsi",
++    priceItems: [
++      "Ibirayi     1,800/kg",
++      "Ibigori     1,200/kg",
++      "Ibishyimbo  2,000/kg",
++      "Ikawa       6,000/kg",
++    ],
++    offers: "Icyifuzo cyakiriwe",
++    offerItems: [
++      "Cafe du Rift",
++      "100kg ikawa @ 6,200",
++      "Byose: 620,000 RWF",
++      "",
++      "1. Emera   2. Anga",
++    ],
++    accepted: "Icyifuzo cyemewe.",
++    acceptedBody: [
++      "Umuguzi azishyura",
++      "hakoreshejwe Lightning.",
++      "Amafaranga abikwa kugeza",
++      "wemeje ko byatanzwe.",
++    ],
++    rejected: "Icyifuzo cyanzwe.",
++    rejectedBody: ["Umuguzi yamenyeshejwe."],
++    wallet: "Amafaranga yawe",
++    walletItems: [
++      "Ahari:    610,000 RWF",
++      "Abitswe:  240,000 RWF",
++      "",
++      "Yishyuwe na Lightning.",
++    ],
++    handoff: "Gufungura AgriFlow...",
++    handoffBody: ["Komeza kuri porogaramu", "kugira ngo ubone byose."],
++    invalid: "Amahitamo atariyo.",
++    invalidBody: ["Ongera ugerageze."],
++    back: "0. Subira inyuma",
++  },
++} as const;
++
++export const USSD_CODE = "*789#";
++
++/**
++ * Resolves the accumulated input into a screen.
++ *
++ * Kept as one pure function of (locale, path) so any step can be replayed or
++ * rewound - useful on stage when a demo needs to jump back a level.
++ */
++export function resolveScreen(state: UssdState): UssdScreen {
++  const { path, locale } = state;
++
++  if (!locale) {
++    return {
++      kind: "CON",
++      title: T.en.welcome,
++      body: ["Choose language /", "Hitamo ururimi", "", ...T.en.chooseLang],
++    };
++  }
++
++  const t = T[locale];
++  const [first, ...rest] = path;
++
++  if (path.length === 0) {
++    return { kind: "CON", title: t.main, body: [...t.mainItems] };
++  }
++
++  switch (first) {
++    case "1": {
++      // Sell: crop -> quantity -> price -> confirmation
++      if (rest.length === 0) {
++        return { kind: "CON", title: t.sell, body: [...t.sellItems, "", t.back] };
++      }
++      if (rest.length === 1) return { kind: "CON", title: t.qty, body: [] };
++      if (rest.length === 2) return { kind: "CON", title: t.price, body: [] };
++      const crop = t.sellItems[Number(rest[0]) - 1] ?? t.sellItems[0];
++      return {
++        kind: "END",
++        title: t.listed,
++        body: [crop.replace(/^\d+\.\s*/, ""), `${rest[1]}kg @ ${rest[2]} RWF`, "", ...t.listedBody],
++      };
++    }
++
++    case "2":
++      return { kind: "CON", title: t.prices, body: [...t.priceItems, "", t.back] };
++
++    case "3": {
++      if (rest.length === 0) {
++        return { kind: "CON", title: t.offers, body: [...t.offerItems, "", t.back] };
++      }
++      if (rest[0] === "1") {
++        return { kind: "END", title: t.accepted, body: [...t.acceptedBody] };
++      }
++      if (rest[0] === "2") {
++        return { kind: "END", title: t.rejected, body: [...t.rejectedBody] };
++      }
++      return { kind: "CON", title: t.invalid, body: [...t.invalidBody, "", t.back] };
++    }
++
++    case "4":
++      return { kind: "CON", title: t.wallet, body: [...t.walletItems, "", t.back] };
++
++    case "5":
++      return { kind: "END", title: t.handoff, body: [...t.handoffBody], handoff: true };
++
++    default:
++      return { kind: "CON", title: t.invalid, body: [...t.invalidBody, "", t.back] };
++  }
++}
++
++/** True when the current step expects free text rather than a menu choice. */
++export function expectsFreeText(state: UssdState): boolean {
++  return state.locale !== null && state.path[0] === "1" && state.path.length >= 2 && state.path.length <= 3;
++}
+-- 
+2.43.0
+

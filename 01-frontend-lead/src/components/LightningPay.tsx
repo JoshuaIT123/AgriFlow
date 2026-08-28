@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useI18n } from "@/lib/i18n-context";
@@ -18,7 +18,7 @@ interface LnInvoice {
   expirySecs: number;
 }
 
-export function LightningPay({ accountId }: { accountId: string }) {
+export function LightningPay({ accountId, role = "buyer" }: { accountId: string; role?: "buyer" | "farmer" }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<LnStatus | null>(null);
   const [sats, setSats] = useState("");
@@ -136,6 +136,7 @@ export function LightningPay({ accountId }: { accountId: string }) {
   };
 
   const hasNode = status?.available || false;
+  const roleLabel = role === "buyer" ? "Buyer (alice)" : "Farmer";
 
   return (
     <div className="card" style={{ marginTop: 14 }}>
@@ -157,13 +158,19 @@ export function LightningPay({ accountId }: { accountId: string }) {
         {status === null
           ? t("ln.creating")
           : hasNode && status?.node
-            ? `${t("ln.nodeAlias")}: ${status.node.alias || status.node.nodeName}${
+            ? `${roleLabel} · ${t("ln.nodeAlias")}: ${status.node.alias || status.node.nodeName}${
                 status.node.balance != null
                   ? ` · ${t("ln.nodeBalance")}: ${status.node.balance} sats`
                   : ""
               }`
             : t("ln.subtitle")}
       </p>
+
+      {role === "buyer" && hasNode && (
+        <p className="subtle" style={{ margin: "0 0 12px", fontSize: 12 }}>
+          Payment routes to escrow (alice), then settles out to the farmer on trade completion.
+        </p>
+      )}
 
       {!hasNode && status && (
         <div className="ln-off" style={{ color: "var(--danger)", fontSize: 13 }}>

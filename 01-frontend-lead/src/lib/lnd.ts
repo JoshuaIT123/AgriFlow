@@ -1,13 +1,5 @@
-/*
+﻿/*
  * LND REST client + Polar auto-detection.
- *
- * A TypeScript port of the Day-4 "Lightning Webstore" approach
- * (lnd_client.py + polar_detect.py): talk to a local Polar LND node over its
- * REST API using the admin macaroon (hex) and its self-signed TLS cert.
- *
- * The heavy lifting lives here so the user-facing interface stays simple:
- * create an invoice -> show QR/BOLT11 -> poll until it's settled.
- * In production this service layer would run on a real backend.
  */
 
 import fs from "node:fs";
@@ -20,11 +12,12 @@ export interface LndConfig {
   restHost: string;
   nodeName: string;
   networkName?: string;
+  macaroonHex?: string;
 }
 
 export interface Invoice {
-  rHash: string; // hex
-  payReq: string; // BOLT11 payment_request
+  rHash: string;
+  payReq: string;
   expirySecs: number;
 }
 
@@ -35,7 +28,6 @@ const POLAR_NETWORKS_FILE = path.join(
   "networks.json"
 );
 
-/** Parse Polar networks.json and find an LND node (prefer `preferName`). */
 export function findPolarNode(preferName = "alice"): LndConfig | null {
   if (!fs.existsSync(POLAR_NETWORKS_FILE)) return null;
   let data: { networks?: unknown[] };
@@ -52,8 +44,7 @@ export function findPolarNode(preferName = "alice"): LndConfig | null {
     nodes?: { lightning?: unknown[] };
   }>;
 
-  // Polar writes status as a number (1 = Started); older builds used a string.
-const isStarted = (s: unknown) => Number(s) === 1 || String(s).toUpperCase() === "STARTED";
+  const isStarted = (s: unknown) => Number(s) === 1 || String(s).toUpperCase() === "STARTED";
 
   const sortKey = (n: { status?: unknown; id?: unknown }) => {
     const running = isStarted(n.status) ? 1 : 0;
@@ -68,7 +59,6 @@ const isStarted = (s: unknown) => Number(s) === 1 || String(s).toUpperCase() ===
       status?: unknown;
       ports?: { rest?: number };
     }>;
-    // Prefer an exact-name LND node, else the highest-status LND node.
     const exact = lndNodes.find(
       (n) =>
         String(n.implementation).toUpperCase() === "LND" &&
@@ -94,18 +84,16 @@ const isStarted = (s: unknown) => Number(s) === 1 || String(s).toUpperCase() ===
   return null;
 }
 
-/**
- * Resolve LND config: env override first, then Polar auto-detect.
- *
- * REST_HOST alone is enough when LND_MACAROON_HEX supplies the credential,
- * which is how a hosted deployment reaches a node it has no filesystem access
- * to. On a developer machine LND_DIR is still used to read the macaroon.
- */
 export function resolveConfig(preferName = "alice"): LndConfig {
   const envDir = process.env.LND_DIR;
   const envHost = process.env.REST_HOST;
   if (envHost && (envDir || process.env.LND_MACAROON_HEX)) {
-    return { lndDir: envDir ?? "", restHost: envHost, nodeName: preferName };
+    return {
+      lndDir: envDir ?? "",
+      restHost: envHost,
+      nodeName: preferName,
+      macaroonHex: process.env.LND_MACAROON_HEX,
+    };
   }
   return (
     findPolarNode(preferName) ?? {
@@ -116,16 +104,31 @@ export function resolveConfig(preferName = "alice"): LndConfig {
   );
 }
 
+/**
+ * Resolve a named node's LND config, distinct from the default alice
+ * config - used for a farmer stand-in wallet that receives payouts.
+ */
+export function resolveNamedConfig(nodeName: string): LndConfig {
+  const upper = nodeName.toUpperCase();
+  const envHost = process.env[upper + "_REST_HOST"];
+  const envDir = process.env[upper + "_LND_DIR"];
+  const envMac = process.env[upper + "_LND_MACAROON_HEX"];
+  if (envHost && (envDir || envMac)) {
+    return { lndDir: envDir ?? "", restHost: envHost, nodeName, macaroonHex: envMac };
+  }
+  const found = findPolarNode(nodeName);
+  if (found) return found;
+  throw new Error(
+    "No LND config for node \"" + nodeName + "\". Set " + upper + "_REST_HOST + " + upper + "_LND_MACAROON_HEX, or run against a local Polar network with that node."
+  );
+}
+
 export class LndClient {
   private macaroonHex = "";
 
   constructor(private config: LndConfig) {
-    /*
-     * A hosted deployment has no ~/.polar to read, so the macaroon may be
-     * supplied directly as hex. It is a full admin credential: only ever do
-     * this for a regtest node, never one holding real funds.
-     */
-    const fromEnv = process.env.LND_MACAROON_HEX?.trim();
+    const fromConfig = config.macaroonHex?.trim();
+    const fromEnv = fromConfig || process.env.LND_MACAROON_HEX?.trim();
     if (fromEnv) {
       this.macaroonHex = fromEnv;
       return;
@@ -168,11 +171,6 @@ export class LndClient {
     return this.rawReq(method, endpoint, headers, payload);
   }
 
-  /**
-   * Perform an LND REST call over Node's http(s) with TLS verification
-   * disabled (LND uses a self-signed cert). Built-in fetch/undici can't
-   * bypass self-signed TLS, so we use https.request directly.
-   */
   private rawReq<T>(
     method: string,
     endpoint: string,
@@ -247,11 +245,9 @@ export class LndClient {
     value?: string | number;
     settle_date?: number;
   }> {
-    // LND REST /v1/invoice/{r_hash_str} parses the path segment as hex.
     return this.req("GET", `/v1/invoice/${hexRHash}`);
   }
 
-  /** Helper: create an invoice and normalise to a simple shape. */
   async createInvoice(amount: number, memo = ""): Promise<Invoice> {
     const raw = await this.addInvoice(amount, memo);
     const rHash = Buffer.from(raw.r_hash, "base64").toString("hex");
@@ -259,6 +255,31 @@ export class LndClient {
       rHash,
       payReq: raw.payment_request,
       expirySecs: Number(raw.expiry ?? 3600),
+    };
+  }
+
+  async payInvoice(paymentRequest: string): Promise<{
+    paid: boolean;
+    paymentHash?: string;
+    preimage?: string;
+    error?: string;
+  }> {
+    const raw = await this.req<{
+      payment_error?: string;
+      payment_preimage?: string;
+      payment_hash?: string;
+    }>("POST", "/v1/channels/transactions", { payment_request: paymentRequest });
+    if (raw.payment_error) {
+      return { paid: false, error: raw.payment_error };
+    }
+    return {
+      paid: true,
+      paymentHash: raw.payment_hash
+        ? Buffer.from(raw.payment_hash, "base64").toString("hex")
+        : undefined,
+      preimage: raw.payment_preimage
+        ? Buffer.from(raw.payment_preimage, "base64").toString("hex")
+        : undefined,
     };
   }
 }

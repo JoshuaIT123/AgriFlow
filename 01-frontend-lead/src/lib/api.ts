@@ -261,3 +261,18 @@ export interface Predictions {
 export function apiPredictions(): Promise<{ predictions: Predictions }> {
   return request<{ predictions: Predictions }>("/api/predictions");
 }
+
+/* ---------------- Wandaa AI ---------------- */
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** In-app support chat. Same HF token stays server-side on the backend. */
+export function apiChat(messages: ChatMessage[]): Promise<{ reply: string; model: string }> {
+  return request<{ reply: string; model: string }>("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({ messages }),
+  });
+}
