@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, type FormEvent } from "react";
 import { useI18n } from "@/lib/i18n-context";
@@ -8,7 +8,7 @@ import { formatDate, formatRwf } from "@/lib/format";
 import { Toast } from "./Toast";
 import { LightningPay } from "./LightningPay";
 
-export function WalletBoard({ accountId }: { accountId: string }) {
+export function WalletBoard({ accountId, role = "buyer" }: { accountId: string; role?: "buyer" | "farmer" }) {
   const { t, locale } = useI18n();
   const version = useStoreVersion();
   const [amount, setAmount] = useState("");
@@ -76,7 +76,7 @@ export function WalletBoard({ accountId }: { accountId: string }) {
         </form>
       </div>
 
-      <LightningPay accountId={accountId} />
+      <LightningPay accountId={accountId} role={role} />
 
       <div className="section-head">
         <h3>{t("wallet.txns")}</h3>
