@@ -27,5 +27,5 @@ export async function GET(request: NextRequest) {
     trades = await db.trades.listForUser(auth.user.id);
   }
 
-  return sendOk({ trades: trades.map(async (t) => await tradeView(t)) });
+  return sendOk({ trades: await Promise.all(trades.map((t) => tradeView(t))) });
 }

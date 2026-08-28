@@ -16,5 +16,5 @@ export async function GET(request: NextRequest) {
       ? await db.offers.listForProducts((await db.products.listActive()).map((p) => p.id))
       : await db.offers.listByBuyer(auth.user.id);
 
-  return sendOk({ offers: offers.map(async (o) => await offerView(o)) });
+  return sendOk({ offers: await Promise.all(offers.map((o) => offerView(o))) });
 }

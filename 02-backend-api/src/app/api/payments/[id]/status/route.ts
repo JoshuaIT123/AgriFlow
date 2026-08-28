@@ -1,30 +1,69 @@
 import { NextRequest } from "next/server";
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth, canAccessTrade } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { sendOk } from "@/lib/http";
-import { offerView } from "@/lib/services/views";
+import { forbidden, notFound, sendOk } from "@/lib/http";
+import { lightning } from "@/lib/services/lightning";
+import { transitionTrade } from "@/lib/services/trades";
+import { tradeView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/offers/received - farmer views offers on own products (UC-13).
- * Pending offers are listed first, then newest.
+ * GET /api/payments/:id/status - request payment status from the Lightning
+ * layer (UC-22, UC-23). Only payment status from Lightning may move a trade
+ * to PAID/PAYMENT_LOCKED/DELIVERY_PENDING (business rule 11/12).
+ *
+ *  - Lightning reports PAID  -> payment PAID, trade locks payment then enters
+ *    DELIVERY_PENDING (both recorded in statusHistory).
+ *  - Lightning reports FAILED -> payment FAILED, trade returns to AGREED.
  */
-export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request);
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const auth = await requireAuth(_request);
   if ("error" in auth) return auth.error;
-  const roleErr = requireRole(auth.user, ["FARMER", "ADMIN"]);
-  if (roleErr) return roleErr;
 
-  const farmerProducts = await db.products.listByFarmer(auth.user.id);
-  const productIds = farmerProducts.map((p) => p.id);
-  const offers = await db.offers.listForProducts(productIds);
+  const payment = await db.payments.findById(params.id);
+  if (!payment) return notFound("Payment not found");
 
-  offers.sort((a, b) => {
-    if (a.status === "PENDING" && b.status !== "PENDING") return -1;
-    if (b.status === "PENDING" && a.status !== "PENDING") return 1;
-    return b.createdAt.localeCompare(a.createdAt);
+  const trade = await db.trades.findById(payment.tradeId);
+  if (!trade) return notFound("Trade not found");
+
+  if (!canAccessTrade(auth.user, trade)) {
+    return forbidden("You do not have access to this payment");
+  }
+
+  const result = await lightning.checkPayment(payment.paymentHash);
+
+  if (result.failed && payment.status !== "FAILED") {
+    await db.payments.update(payment.id, { status: "FAILED" });
+    if (trade.status === "PAYMENT_PENDING") {
+      const updated = transitionTrade(trade, "AGREED");
+      await db.trades.update(updated.id, updated);
+      return sendOk({
+        payment: await db.payments.findById(payment.id),
+        trade: await tradeView(updated),
+      });
+    }
+  } else if (result.paid && payment.status !== "PAID") {
+    await db.payments.update(payment.id, {
+      status: "PAID",
+      paidAt: result.settledAt ?? new Date().toISOString(),
+    });
+    if (trade.status === "PAYMENT_PENDING") {
+      const locked = transitionTrade(trade, "PAYMENT_LOCKED");
+      const delivery = transitionTrade(locked, "DELIVERY_PENDING");
+      await db.trades.update(delivery.id, delivery);
+      return sendOk({
+        payment: await db.payments.findById(payment.id),
+        trade: await tradeView(delivery),
+      });
+    }
+  }
+
+  return sendOk({
+    payment: await db.payments.findById(payment.id),
+    trade: await tradeView(trade),
   });
-
-  return sendOk({ offers: offers.map(async (o) => await offerView(o)) });
 }

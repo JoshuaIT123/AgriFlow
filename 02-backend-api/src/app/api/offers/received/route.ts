@@ -26,5 +26,5 @@ export async function GET(request: NextRequest) {
     return b.createdAt.localeCompare(a.createdAt);
   });
 
-  return sendOk({ offers: offers.map(async (o) => await offerView(o)) });
+  return sendOk({ offers: await Promise.all(offers.map((o) => offerView(o))) });
 }

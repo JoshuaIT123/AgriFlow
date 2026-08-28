@@ -1,31 +1,25 @@
 import { NextRequest } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, canAccessTrade } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { sendOk } from "@/lib/http";
+import { forbidden, notFound, sendOk } from "@/lib/http";
 import { tradeView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/trades - trade history for the current user (UC-18).
- * Optional ?role=buyer|farmer narrows the list; default returns all trades
- * the user participates in (as buyer or farmer).
- */
-export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request);
+/** GET /api/trades/:id - view a trade (UC-17). */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const auth = await requireAuth(_request);
   if ("error" in auth) return auth.error;
 
-  const { searchParams } = new URL(request.url);
-  const role = searchParams.get("role");
+  const trade = await db.trades.findById(params.id);
+  if (!trade) return notFound("Trade not found");
 
-  let trades;
-  if (role === "buyer") {
-    trades = await db.trades.listByBuyer(auth.user.id);
-  } else if (role === "farmer") {
-    trades = await db.trades.listByFarmer(auth.user.id);
-  } else {
-    trades = await db.trades.listForUser(auth.user.id);
+  if (!canAccessTrade(auth.user, trade)) {
+    return forbidden("You do not have access to this trade");
   }
 
-  return sendOk({ trades: trades.map(async (t) => await tradeView(t)) });
+  return sendOk({ trade: await tradeView(trade) });
 }
