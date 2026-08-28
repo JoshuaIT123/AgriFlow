@@ -5,6 +5,7 @@ import { useI18n } from "@/lib/i18n-context";
 import { useStoreVersion } from "@/lib/store-bus";
 import { getWalletTxns, simulateWalletTopUp, walletBalance, walletHeld } from "@/lib/store";
 import { formatDate, formatRwf } from "@/lib/format";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { Toast } from "./Toast";
 import { LightningPay } from "./LightningPay";
 
@@ -89,7 +90,9 @@ export function WalletBoard({ accountId, role = "buyer" }: { accountId: string; 
             const isCredit = tx.kind === "credit";
             return (
               <div className="tx-row" key={tx.id}>
-                <div className="tx-icon">{isCredit ? "⬇️" : "⬆️"}</div>
+                <div className="tx-icon" aria-hidden>
+                  {isCredit ? <ArrowDown size={22} /> : <ArrowUp size={22} />}
+                </div>
                 <div className="tx-main">
                   <div className="tx-title">{noteLabel(tx.note)}</div>
                   <div className="tx-sub">

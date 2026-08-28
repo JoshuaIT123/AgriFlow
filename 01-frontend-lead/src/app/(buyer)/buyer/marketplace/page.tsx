@@ -73,9 +73,11 @@ export default function BuyerMarketplace() {
         {filtered.length === 0 ? (
           <div className="empty">{query ? t("mkt.noResults") : t("mkt.empty")}</div>
         ) : (
-          filtered.map((p) => (
+          filtered.map((p) => {
+            const ProductIcon = productIcon(p.category, p.unit);
+            return (
             <div className="tx-row" key={p.id}>
-              <div className="tx-icon">{productIcon(p.category, p.unit)}</div>
+              <div className="tx-icon" aria-hidden><ProductIcon size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{p.title}</div>
                 <div className="tx-sub">
@@ -96,7 +98,8 @@ export default function BuyerMarketplace() {
                 </button>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 

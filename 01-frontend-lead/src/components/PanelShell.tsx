@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
 import { useAuth } from "@/lib/auth-context";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -11,7 +12,7 @@ import { LanguageSwitcher } from "./LanguageSwitcher";
 export interface PanelTab {
   href: string;
   key: string;
-  icon: string;
+  icon: LucideIcon;
   home?: boolean;
 }
 
@@ -97,7 +98,7 @@ export function PanelShell({
                 className={`nav-item ${isActive ? "active" : ""}`}
               >
                 <span className="nav-icon" aria-hidden>
-                  {tab.icon}
+                  <tab.icon size={20} strokeWidth={2} />
                 </span>
                 {t(tab.key)}
               </Link>

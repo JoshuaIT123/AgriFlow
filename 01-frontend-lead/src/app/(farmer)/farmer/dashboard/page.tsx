@@ -12,6 +12,7 @@ import {
 } from "@/lib/store";
 import { formatDateShort, formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
+import { Handshake, Package, Wheat, ArrowRight } from "lucide-react";
 import { useMemo } from "react";
 import { ProductBadge, OfferBadge, DealBadge } from "@/components/Badge";
 import { PredictionPanel } from "@/components/PredictionPanel";
@@ -78,7 +79,8 @@ export default function FarmerDashboard() {
       <div className="section-head">
         <h3>{t("fdash.products")}</h3>
         <Link href="/farmer/products" className="link-btn">
-          {t("fdash.viewAll")} →
+          {t("fdash.viewAll")}
+          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
         </Link>
       </div>
       <div className="card">
@@ -87,7 +89,7 @@ export default function FarmerDashboard() {
         ) : (
           data.products.slice(0, 3).map((p) => (
             <div className="tx-row" key={p.id}>
-              <div className="tx-icon">🌾</div>
+              <div className="tx-icon" aria-hidden><Wheat size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{p.title}</div>
                 <div className="tx-sub">
@@ -104,7 +106,8 @@ export default function FarmerDashboard() {
       <div className="section-head">
         <h3>{t("fdash.offers")}</h3>
         <Link href="/farmer/offers" className="link-btn">
-          {t("fdash.viewAll")} →
+          {t("fdash.viewAll")}
+          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
         </Link>
       </div>
       <div className="card">
@@ -113,7 +116,7 @@ export default function FarmerDashboard() {
         ) : (
           data.offers.slice(0, 3).map((o) => (
             <div className="tx-row" key={o.id}>
-              <div className="tx-icon">🤝</div>
+              <div className="tx-icon" aria-hidden><Handshake size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{o.buyerName}</div>
                 <div className="tx-sub">
@@ -131,7 +134,8 @@ export default function FarmerDashboard() {
       <div className="section-head">
         <h3>{t("fdash.deals")}</h3>
         <Link href="/farmer/payments" className="link-btn">
-          {t("fdash.viewAll")} →
+          {t("fdash.viewAll")}
+          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
         </Link>
       </div>
       <div className="card">
@@ -140,7 +144,7 @@ export default function FarmerDashboard() {
         ) : (
           data.deals.slice(0, 3).map((d) => (
             <div className="tx-row" key={d.id}>
-              <div className="tx-icon">📦</div>
+              <div className="tx-icon" aria-hidden><Package size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{d.productTitle}</div>
                 <div className="tx-sub">

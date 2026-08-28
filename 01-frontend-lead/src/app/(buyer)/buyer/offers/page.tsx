@@ -8,6 +8,7 @@ import { getMyOffers, getProducts } from "@/lib/store";
 import { formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
 import { OfferBadge } from "@/components/Badge";
+import { Handshake } from "lucide-react";
 
 export default function BuyerOffers() {
   const { user } = useAuth();
@@ -40,7 +41,7 @@ export default function BuyerOffers() {
         ) : (
           rows.map(({ offer, productTitle }) => (
             <div className="tx-row" key={offer.id}>
-              <div className="tx-icon">🤝</div>
+              <div className="tx-icon" aria-hidden><Handshake size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{productTitle}</div>
                 <div className="tx-sub">

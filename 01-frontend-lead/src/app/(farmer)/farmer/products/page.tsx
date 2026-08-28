@@ -14,6 +14,7 @@ import { formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
 import type { Unit } from "@/lib/types";
 import { ProductBadge } from "@/components/Badge";
+import { Wheat } from "lucide-react";
 import { Toast } from "@/components/Toast";
 
 const CATEGORIES = [
@@ -180,7 +181,7 @@ export default function FarmerProducts() {
         ) : (
           products.map(({ product, offerCount }) => (
             <div className="tx-row" key={product.id}>
-              <div className="tx-icon">🌾</div>
+              <div className="tx-icon" aria-hidden><Wheat size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{product.title}</div>
                 <div className="tx-sub">

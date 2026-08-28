@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useI18n } from "@/lib/i18n-context";
 import { apiPredictions, type Predictions } from "@/lib/api";
 import { formatRwf } from "@/lib/format";
+import { TrendingUp } from "lucide-react";
 
 /**
  * AI market outlook.
@@ -62,7 +63,7 @@ export function PredictionPanel() {
           ) : (
             data.forecasts.map((f) => (
               <div className="tx-row" key={f.productId}>
-                <div className="tx-icon">📈</div>
+                <div className="tx-icon" aria-hidden><TrendingUp size={22} /></div>
                 <div className="tx-main">
                   <div className="tx-title">{f.name}</div>
                   <div className="tx-sub">{f.note}</div>

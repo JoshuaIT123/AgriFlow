@@ -5,6 +5,7 @@ import { useI18n } from "@/lib/i18n-context";
 import { simulateWalletTopUp } from "@/lib/store";
 import { bumpStore } from "@/lib/store-bus";
 import { formatRwf } from "@/lib/format";
+import { CheckCircle2, LoaderCircle, TriangleAlert, Zap } from "lucide-react";
 
 interface LnStatus {
   available: boolean;
@@ -151,7 +152,7 @@ export function LightningPay({ accountId, role = "buyer" }: { accountId: string;
           }}
           title={hasNode ? t("ln.nodeOn") : t("ln.nodeOff")}
         >
-          ●
+          <Zap size={13} aria-hidden />
         </span>
       </h3>
       <p className="subtle" style={{ margin: "0 0 12px" }}>
@@ -174,7 +175,8 @@ export function LightningPay({ accountId, role = "buyer" }: { accountId: string;
 
       {!hasNode && status && (
         <div className="ln-off" style={{ color: "var(--danger)", fontSize: 13 }}>
-          ⚠ {t("ln.needNode")}
+          <TriangleAlert size={14} aria-hidden style={{ verticalAlign: "-2px", marginRight: 4 }} />
+          {t("ln.needNode")}
         </div>
       )}
 
@@ -216,7 +218,8 @@ export function LightningPay({ accountId, role = "buyer" }: { accountId: string;
 
       {error && (
         <div className="ln-off" style={{ color: "var(--danger)", fontSize: 13, marginTop: 8 }}>
-          ⚠ {error}
+          <TriangleAlert size={14} aria-hidden style={{ verticalAlign: "-2px", marginRight: 4 }} />
+          {error}
         </div>
       )}
 
@@ -254,7 +257,8 @@ export function LightningPay({ accountId, role = "buyer" }: { accountId: string;
                 </button>
               </div>
               <div className="ln-waiting" style={{ marginTop: 14, color: "var(--warning)", fontWeight: 700 }}>
-                ⏳ {t("ln.waiting")}
+                <LoaderCircle size={14} aria-hidden style={{ verticalAlign: "-2px", marginRight: 4 }} />
+                {t("ln.waiting")}
               </div>
             </div>
           </div>
@@ -263,7 +267,8 @@ export function LightningPay({ accountId, role = "buyer" }: { accountId: string;
 
       {settled && (
         <div style={{ marginTop: 14, color: "var(--green)", fontWeight: 700 }}>
-          ✅ {t("ln.paid")} (+{formatRwf(rwfEq)})
+          <CheckCircle2 size={14} aria-hidden style={{ verticalAlign: "-2px", marginRight: 4 }} />
+          {t("ln.paid")} (+{formatRwf(rwfEq)})
         </div>
       )}
     </div>

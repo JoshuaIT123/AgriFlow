@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { UssdPhone } from "@/components/UssdPhone";
 
 export const metadata = {
@@ -17,7 +18,8 @@ export default function UssdPage() {
           </p>
         </div>
         <Link className="btn btn-ghost btn-sm" href="/">
-          ← Home
+          <ArrowLeft size={14} aria-hidden style={{ verticalAlign: "-2px", marginRight: 4 }} />
+          Home
         </Link>
       </div>
       <UssdPhone />
