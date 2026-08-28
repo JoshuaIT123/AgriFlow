@@ -13,6 +13,7 @@ export class ProductRepository {
         price: input.price,
         location: input.location,
         quality: input.quality,
+        imageUrl: input.imageUrl ?? null,
         status: input.status,
       },
     });
@@ -22,6 +23,16 @@ export class ProductRepository {
   async update(id: string, patch: Partial<Product>): Promise<Product | undefined> {
     try {
       const p = await prisma.product.update({ where: { id }, data: patch });
+      return this.toProduct(p);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Sets (or clears, when null) the product photo URL. */
+  async setImageUrl(id: string, imageUrl: string | null): Promise<Product | undefined> {
+    try {
+      const p = await prisma.product.update({ where: { id }, data: { imageUrl } });
       return this.toProduct(p);
     } catch {
       return undefined;
@@ -59,6 +70,7 @@ export class ProductRepository {
       price: p.price,
       location: p.location,
       quality: p.quality,
+      imageUrl: p.imageUrl ?? undefined,
       status: p.status,
       createdAt: p.createdAt.toISOString(),
     };

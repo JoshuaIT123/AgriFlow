@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DomainError } from "./errors";
 
 export interface ApiErrorBody {
   error: string;
@@ -29,6 +30,13 @@ export const unauthorized = (msg = "Authentication required") => sendError(msg, 
 export const forbidden = (msg = "You are not allowed to perform this action") => sendError(msg, 403);
 export const notFound = (msg = "Resource not found") => sendError(msg, 404);
 export const conflict = (msg = "Resource already exists") => sendError(msg, 409);
+
+/** Maps a domain/business-rule failure to its HTTP response (500 otherwise). */
+export function sendDomainError(err: unknown): NextResponse {
+  if (err instanceof DomainError) return sendError(err.message, err.status);
+  console.error("Unhandled error:", err);
+  return sendError("Internal server error", 500);
+}
 
 function httpStatusLabel(status: number): string {
   switch (status) {

@@ -26,6 +26,9 @@ yarn-error.log*
 # local postgres cluster (gitignored data dir)
 .pgdata/
 
+# user-uploaded product photos (local file storage)
+uploads/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
