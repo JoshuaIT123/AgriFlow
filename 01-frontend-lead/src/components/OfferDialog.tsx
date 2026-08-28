@@ -6,7 +6,7 @@ import { placeOffer } from "@/lib/store";
 import { bumpStore } from "@/lib/store-bus";
 import { formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
-import type { Product } from "@/lib/types";
+import type { Deal, Product } from "@/lib/types";
 
 export function OfferDialog({
   product,
@@ -17,7 +17,7 @@ export function OfferDialog({
   product: Product;
   buyerId: string;
   buyerName: string;
-  onClose: (result?: "done" | "exists") => void;
+  onClose: (result?: "done" | "exists", deal?: Deal | null) => void;
 }) {
   const { t } = useI18n();
   const [price, setPrice] = useState(String(product.pricePerKg));
@@ -34,7 +34,7 @@ export function OfferDialog({
       setError(t("auth.err.required"));
       return;
     }
-    const ok = await placeOffer({
+    const res = await placeOffer({
       productId: product.id,
       buyerId,
       buyerName,
@@ -43,7 +43,9 @@ export function OfferDialog({
       message,
     });
     bumpStore();
-    onClose(ok ? "done" : "exists");
+    // An offer meeting the asking price comes back with its trade already
+    // open, so the caller can go straight to payment.
+    onClose(res.ok ? "done" : "exists", res.deal);
   };
 
   return (

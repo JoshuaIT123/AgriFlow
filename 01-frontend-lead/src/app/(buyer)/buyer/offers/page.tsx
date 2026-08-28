@@ -1,19 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useStoreVersion } from "@/lib/store-bus";
-import { getMyOffers, getProducts } from "@/lib/store";
+import { getDealForOffer, getMyOffers, getProducts } from "@/lib/store";
 import { formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
 import { OfferBadge } from "@/components/Badge";
+import { TradePayDialog } from "@/components/TradePayDialog";
+import { Toast } from "@/components/Toast";
+import type { Deal } from "@/lib/types";
 import { Handshake } from "lucide-react";
 
 export default function BuyerOffers() {
   const { user } = useAuth();
   const { t } = useI18n();
   const version = useStoreVersion();
+  const [payDeal, setPayDeal] = useState<Deal | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     if (!user) return [];
@@ -22,6 +27,8 @@ export default function BuyerOffers() {
     return getMyOffers(user.id).map((o) => ({
       offer: o,
       productTitle: title.get(o.productId) ?? o.productId.slice(0, 6),
+      // Present only while the opened trade still awaits payment.
+      deal: getDealForOffer(o.id),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, version]);
@@ -39,8 +46,17 @@ export default function BuyerOffers() {
         {rows.length === 0 ? (
           <div className="empty">{t("offer.noSent")}</div>
         ) : (
-          rows.map(({ offer, productTitle }) => (
-            <div className="tx-row" key={offer.id}>
+          rows.map(({ offer, productTitle, deal }) => {
+            const payable = deal?.tradeStatus === "AGREED";
+            return (
+            <div
+              className="tx-row"
+              key={offer.id}
+              onClick={() => payable && deal && setPayDeal(deal)}
+              role={payable ? "button" : undefined}
+              tabIndex={payable ? 0 : undefined}
+              style={payable ? { cursor: "pointer" } : undefined}
+            >
               <div className="tx-icon" aria-hidden><Handshake size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{productTitle}</div>
@@ -50,6 +66,11 @@ export default function BuyerOffers() {
                 </div>
                 <div style={{ marginTop: 6 }}>
                   <OfferBadge status={offer.status} />
+                  {payable && (
+                    <span className="badge badge-ok" style={{ marginLeft: 6 }}>
+                      {t("offer.tapToPay")}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="tx-side">
@@ -58,9 +79,22 @@ export default function BuyerOffers() {
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
+
+      {payDeal && (
+        <TradePayDialog
+          deal={payDeal}
+          onClose={(paid) => {
+            setPayDeal(null);
+            if (paid) setToast(t("pay.paid"));
+          }}
+        />
+      )}
+
+      <Toast message={toast} />
     </div>
   );
 }

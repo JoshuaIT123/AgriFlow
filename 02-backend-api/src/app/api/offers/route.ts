@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { badRequest, forbidden, notFound, sendOk } from "@/lib/http";
-import { offerView } from "@/lib/services/views";
+import { offerView, tradeView } from "@/lib/services/views";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,13 @@ const createOfferSchema = z.object({
 
 /**
  * POST /api/offers - buyer creates an offer (UC-11).
+ *
  * The backend computes total_amount (business rule: never trust client money).
+ *
+ * An offer at or above the asking price is accepted immediately and opens the
+ * trade: the farmer already published those terms, so there is nothing left to
+ * agree. A lower offer is a genuine negotiation and stays PENDING for the
+ * farmer to answer.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -51,6 +57,8 @@ export async function POST(request: NextRequest) {
   // Backend always computes the money (never trust the frontend amount).
   const totalAmount = Math.round(quantity * price * 100) / 100;
 
+  const meetsAsking = price >= product.price;
+
   const offer = await db.offers.create({
     id: randomUUID(),
     buyerId: auth.user.id,
@@ -58,8 +66,33 @@ export async function POST(request: NextRequest) {
     quantity,
     price,
     totalAmount,
-    status: "PENDING",
+    status: meetsAsking ? "ACCEPTED" : "PENDING",
   });
 
-  return sendOk({ offer: await offerView(offer) }, 201);
+  if (!meetsAsking) {
+    return sendOk({ offer: await offerView(offer), trade: null }, 201);
+  }
+
+  const now = new Date().toISOString();
+  const trade = await db.trades.create({
+    id: randomUUID(),
+    offerId: offer.id,
+    buyerId: auth.user.id,
+    farmerId: product.farmerId,
+    productId: product.id,
+    quantity,
+    agreedPrice: price,
+    totalAmount,
+    status: "AGREED",
+    statusHistory: [{ status: "AGREED", at: now }],
+  });
+
+  await db.products.update(product.id, {
+    quantity: product.quantity - quantity,
+  });
+
+  return sendOk(
+    { offer: await offerView(offer), trade: await tradeView(trade) },
+    201,
+  );
 }

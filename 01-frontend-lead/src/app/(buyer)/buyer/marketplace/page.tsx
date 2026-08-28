@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useStoreVersion } from "@/lib/store-bus";
-import { buyNow, getAvailableProducts } from "@/lib/store";
+import { getAvailableProducts } from "@/lib/store";
 import type { Deal, Product } from "@/lib/types";
 import { formatRwf } from "@/lib/format";
 import { productIcon, unitKey, unitOf } from "@/lib/units";
@@ -18,20 +18,7 @@ export default function BuyerMarketplace() {
   const [target, setTarget] = useState<Product | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [payDeal, setPayDeal] = useState<Deal | null>(null);
-  const [buying, setBuying] = useState<string | null>(null);
 
-  /*
-   * Buy now takes the whole listed quantity at the asking price, then hands
-   * the opened trade straight to the payment dialog - one click from browsing
-   * to a Lightning invoice.
-   */
-  const handleBuy = async (p: Product) => {
-    setBuying(p.id);
-    const deal = await buyNow(p.id, p.quantityKg);
-    setBuying(null);
-    if (deal) setPayDeal(deal);
-    else setToast(t("mkt.buyFailed"));
-  };
   const products = useMemo(
     () => getAvailableProducts(),
     // re-read on every store mutation via version
@@ -49,9 +36,13 @@ export default function BuyerMarketplace() {
     );
   }, [products, query]);
   if (!user) return null;
-  const closeDialog = (result?: "done" | "exists") => {
+  const closeDialog = (result?: "done" | "exists", deal?: Deal | null) => {
     setTarget(null);
-    if (result === "done") setToast(t("offer.make.done"));
+    if (result === "done") {
+      // Offers at the asking price open a trade immediately: go to payment.
+      if (deal) setPayDeal(deal);
+      else setToast(t("offer.make.done"));
+    }
     if (result === "exists") setToast(t("offer.make.exists"));
   };
   return (
@@ -105,14 +96,7 @@ export default function BuyerMarketplace() {
               >
                 {t("mkt.offerAction")}
               </button>
-              <button
-                className="btn btn-sm btn-secondary"
-                style={{ marginTop: 6 }}
-                onClick={() => handleBuy(p)}
-                disabled={buying === p.id}
-              >
-                {buying === p.id ? "..." : t("mkt.buyNow")}
-              </button>
+
             </div>
             );
           })}

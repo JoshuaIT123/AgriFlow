@@ -210,8 +210,8 @@ export function apiCreateOffer(input: {
   productId: string;
   quantity: number;
   price: number;
-}): Promise<{ offer: ApiOffer }> {
-  return request<{ offer: ApiOffer }>("/api/offers", {
+}): Promise<{ offer: ApiOffer; trade: ApiTrade | null }> {
+  return request<{ offer: ApiOffer; trade: ApiTrade | null }>("/api/offers", {
     method: "POST",
     body: JSON.stringify(input),
   });

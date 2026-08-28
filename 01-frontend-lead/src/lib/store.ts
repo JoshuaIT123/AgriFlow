@@ -351,6 +351,11 @@ export async function buyNow(
   }
 }
 
+/**
+ * Places an offer. An offer at or above the asking price is accepted by the
+ * backend immediately, which returns the opened trade - the caller can send
+ * that straight to payment instead of waiting on the farmer.
+ */
 export async function placeOffer(input: {
   productId: string;
   buyerId: string;
@@ -358,19 +363,24 @@ export async function placeOffer(input: {
   pricePerKg: number;
   quantityKg: number;
   message?: string;
-}): Promise<boolean> {
+}): Promise<{ ok: boolean; deal: Deal | null }> {
   try {
     // The backend computes the total; it never trusts a client-sent amount.
-    await apiCreateOffer({
+    const res = await apiCreateOffer({
       productId: input.productId,
       quantity: input.quantityKg,
       price: input.pricePerKg,
     });
     await refresh();
-    return true;
+    return { ok: true, deal: res.trade ? mapTrade(res.trade) : null };
   } catch {
-    return false;
+    return { ok: false, deal: null };
   }
+}
+
+/** The trade opened from a given offer, when one exists. */
+export function getDealForOffer(offerId: string): Deal | undefined {
+  return cachedDeals().find((d) => d.offerId === offerId);
 }
 
 export async function respondToOffer(

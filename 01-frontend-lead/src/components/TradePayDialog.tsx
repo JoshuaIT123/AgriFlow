@@ -36,7 +36,9 @@ export function TradePayDialog({
   const [error, setError] = useState<string | null>(null);
   const [left, setLeft] = useState(0);
   const [autoPaying, setAutoPaying] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
   const autoPaidRef = useRef(false);
+  const cancelledRef = useRef(false);
   const pollRef = useRef<number | null>(null);
   const tickRef = useRef<number | null>(null);
 
@@ -101,11 +103,15 @@ export function TradePayDialog({
        */
       setLeft(windowSeconds);
       autoPaidRef.current = false;
+      cancelledRef.current = false;
+      setCancelled(false);
       tickRef.current = window.setInterval(() => {
         setLeft((n) => {
           if (n > 1) return n - 1;
           // Fire once: the interval keeps ticking at zero.
-          if (!autoPaidRef.current) {
+          // Cancelling only stops the automatic payment; the invoice stays
+          // valid, so the payer can still settle it from their own wallet.
+          if (!autoPaidRef.current && !cancelledRef.current) {
             autoPaidRef.current = true;
             void autoPay(res.payment.paymentRequest);
           }
@@ -189,9 +195,29 @@ export function TradePayDialog({
               <button className="btn btn-secondary btn-sm" onClick={copy}>
                 {copied ? t("pay.copied") : t("pay.copy")}
               </button>
-              {left > 0 && <span style={S.countdown}>{t("pay.autoIn")} {left}s</span>}
+              {left > 0 && !cancelled && (
+                <>
+                  <span style={S.countdown}>
+                    {t("pay.autoIn")} {left}s
+                  </span>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      cancelledRef.current = true;
+                      setCancelled(true);
+                      setLeft(0);
+                    }}
+                  >
+                    {t("pay.cancel")}
+                  </button>
+                </>
+              )}
               <span className="subtle" style={{ fontSize: 12 }}>
-                {autoPaying ? t("pay.autoPaying") : t("pay.waiting")}
+                {autoPaying
+                  ? t("pay.autoPaying")
+                  : cancelled
+                    ? t("pay.cancelled")
+                    : t("pay.waiting")}
               </span>
             </div>
             <button className="btn btn-ghost btn-block" onClick={() => onClose(false)}>
