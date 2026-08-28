@@ -3,11 +3,12 @@ import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useStoreVersion } from "@/lib/store-bus";
-import { getAvailableProducts } from "@/lib/store";
-import type { Product } from "@/lib/types";
+import { buyNow, getAvailableProducts } from "@/lib/store";
+import type { Deal, Product } from "@/lib/types";
 import { formatRwf } from "@/lib/format";
 import { productIcon, unitKey, unitOf } from "@/lib/units";
 import { OfferDialog } from "@/components/OfferDialog";
+import { TradePayDialog } from "@/components/TradePayDialog";
 import { Toast } from "@/components/Toast";
 export default function BuyerMarketplace() {
   const { user } = useAuth();
@@ -16,6 +17,21 @@ export default function BuyerMarketplace() {
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<Product | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [payDeal, setPayDeal] = useState<Deal | null>(null);
+  const [buying, setBuying] = useState<string | null>(null);
+
+  /*
+   * Buy now takes the whole listed quantity at the asking price, then hands
+   * the opened trade straight to the payment dialog - one click from browsing
+   * to a Lightning invoice.
+   */
+  const handleBuy = async (p: Product) => {
+    setBuying(p.id);
+    const deal = await buyNow(p.id, p.quantityKg);
+    setBuying(null);
+    if (deal) setPayDeal(deal);
+    else setToast(t("mkt.buyFailed"));
+  };
   const products = useMemo(
     () => getAvailableProducts(),
     // re-read on every store mutation via version
@@ -89,6 +105,14 @@ export default function BuyerMarketplace() {
               >
                 {t("mkt.offerAction")}
               </button>
+              <button
+                className="btn btn-sm btn-secondary"
+                style={{ marginTop: 6 }}
+                onClick={() => handleBuy(p)}
+                disabled={buying === p.id}
+              >
+                {buying === p.id ? "..." : t("mkt.buyNow")}
+              </button>
             </div>
             );
           })}
@@ -102,6 +126,16 @@ export default function BuyerMarketplace() {
           onClose={closeDialog}
         />
       )}
+      {payDeal && (
+        <TradePayDialog
+          deal={payDeal}
+          onClose={(paid) => {
+            setPayDeal(null);
+            if (paid) setToast(t("pay.paid"));
+          }}
+        />
+      )}
+
       <Toast message={toast} />
     </div>
   );

@@ -258,6 +258,16 @@ export class LndClient {
     };
   }
 
+  /** Decodes a BOLT11 so we can check who issued it before paying. */
+  async decodePayReq(paymentRequest: string): Promise<{
+    payment_hash?: string;
+    num_satoshis?: string;
+    destination?: string;
+    description?: string;
+  }> {
+    return this.req("GET", `/v1/payreq/${encodeURIComponent(paymentRequest)}`);
+  }
+
   async payInvoice(paymentRequest: string): Promise<{
     paid: boolean;
     paymentHash?: string;

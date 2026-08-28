@@ -185,6 +185,17 @@ export function apiSetProductStatus(
   });
 }
 
+/** Buy at the listed price: creates an accepted offer and opens the trade. */
+export function apiBuyNow(
+  productId: string,
+  quantity: number,
+): Promise<{ trade: ApiTrade }> {
+  return request<{ trade: ApiTrade }>(`/api/products/${productId}/buy`, {
+    method: "POST",
+    body: JSON.stringify({ quantity }),
+  });
+}
+
 /* ---------------- Offers ---------------- */
 
 export function apiMyOffers(): Promise<{ offers: ApiOffer[] }> {

@@ -2,13 +2,14 @@ import { bumpStore } from "./store-bus";
 import {
   ApiError,
   apiAcceptOffer,
+  apiBuyNow,
   apiConfirmDelivery,
   apiCreateOffer,
   apiCreateProduct,
   apiRejectOffer,
   apiSetProductStatus,
 } from "./api";
-import { cachedDeals, cachedOffers, cachedProducts, refresh } from "./remote";
+import { cachedDeals, cachedOffers, cachedProducts, mapTrade, refresh } from "./remote";
 import type {
   Account,
   BuyerArrangement,
@@ -330,6 +331,23 @@ export async function setProductStatus(
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Buy at the asking price. Returns the opened trade as a Deal so the caller
+ * can hand it straight to the payment dialog.
+ */
+export async function buyNow(
+  productId: string,
+  quantity: number,
+): Promise<Deal | null> {
+  try {
+    const res = await apiBuyNow(productId, quantity);
+    await refresh();
+    return mapTrade(res.trade);
+  } catch {
+    return null;
   }
 }
 

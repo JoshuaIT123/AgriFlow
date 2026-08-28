@@ -15,12 +15,17 @@ import type { Deal } from "@/lib/types";
  * polling the backend, which asks LND - the UI never decides that a payment
  * happened.
  */
+/** Seconds before the demo payer settles the invoice automatically. */
+const INVOICE_WINDOW_SECONDS = 30;
+
 export function TradePayDialog({
   deal,
   onClose,
+  windowSeconds = INVOICE_WINDOW_SECONDS,
 }: {
   deal: Deal;
   onClose: (paid: boolean) => void;
+  windowSeconds?: number;
 }) {
   const { t } = useI18n();
   const [payment, setPayment] = useState<ApiPayment | null>(null);
@@ -29,12 +34,20 @@ export function TradePayDialog({
   const [paid, setPaid] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [left, setLeft] = useState(0);
+  const [autoPaying, setAutoPaying] = useState(false);
+  const autoPaidRef = useRef(false);
   const pollRef = useRef<number | null>(null);
+  const tickRef = useRef<number | null>(null);
 
   const stopPoll = () => {
     if (pollRef.current !== null) {
       window.clearInterval(pollRef.current);
       pollRef.current = null;
+    }
+    if (tickRef.current !== null) {
+      window.clearInterval(tickRef.current);
+      tickRef.current = null;
     }
   };
   useEffect(() => stopPoll, []);
@@ -48,6 +61,29 @@ export function TradePayDialog({
     }
   }, []);
 
+  /*
+   * Demo convenience: after the countdown, a stand-in buyer node settles the
+   * invoice so a presentation needs no terminal. Real buyers pay from their
+   * own wallet, and the backend still decides whether the trade advanced -
+   * this only moves the sats.
+   */
+  const autoPay = useCallback(async (payReq: string) => {
+    setAutoPaying(true);
+    try {
+      const res = await fetch("/api/lightning/demo-pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payReq }),
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) setError(body?.error ?? t("pay.autoFailed"));
+    } catch {
+      setError(t("pay.autoFailed"));
+    } finally {
+      setAutoPaying(false);
+    }
+  }, [t]);
+
   const start = useCallback(async () => {
     setBusy(true);
     setError(null);
@@ -57,6 +93,26 @@ export function TradePayDialog({
       await makeQr(res.payment.paymentRequest);
 
       stopPoll();
+
+      /*
+       * The countdown is a prompt, not a deadline: polling keeps running past
+       * zero, so an invoice paid late is still detected. It only tells the
+       * payer this one is getting stale and offers a fresh one.
+       */
+      setLeft(windowSeconds);
+      autoPaidRef.current = false;
+      tickRef.current = window.setInterval(() => {
+        setLeft((n) => {
+          if (n > 1) return n - 1;
+          // Fire once: the interval keeps ticking at zero.
+          if (!autoPaidRef.current) {
+            autoPaidRef.current = true;
+            void autoPay(res.payment.paymentRequest);
+          }
+          return 0;
+        });
+      }, 1000);
+
       pollRef.current = window.setInterval(async () => {
         try {
           const s = await apiPaymentStatus(res.payment.id);
@@ -78,7 +134,7 @@ export function TradePayDialog({
     } finally {
       setBusy(false);
     }
-  }, [deal.id, makeQr, t]);
+  }, [deal.id, makeQr, t, windowSeconds]);
 
   const copy = async () => {
     if (!payment) return;
@@ -129,12 +185,13 @@ export function TradePayDialog({
               <img src={qr} alt="Lightning invoice QR" style={S.qr} />
             )}
             <div style={S.invoice}>{payment.paymentRequest}</div>
-            <div className="row" style={{ gap: 8 }}>
+            <div className="row" style={{ gap: 8, alignItems: "center" }}>
               <button className="btn btn-secondary btn-sm" onClick={copy}>
                 {copied ? t("pay.copied") : t("pay.copy")}
               </button>
+              {left > 0 && <span style={S.countdown}>{t("pay.autoIn")} {left}s</span>}
               <span className="subtle" style={{ fontSize: 12 }}>
-                {t("pay.waiting")}
+                {autoPaying ? t("pay.autoPaying") : t("pay.waiting")}
               </span>
             </div>
             <button className="btn btn-ghost btn-block" onClick={() => onClose(false)}>
@@ -179,4 +236,13 @@ const S: Record<string, React.CSSProperties> = {
     overflowY: "auto",
   },
   paid: { textAlign: "center" },
+  countdown: {
+    fontFamily: "ui-monospace, monospace",
+    fontWeight: 700,
+    color: "#166534",
+    background: "#dcfce7",
+    borderRadius: 999,
+    padding: "4px 10px",
+    fontSize: 12,
+  },
 };
