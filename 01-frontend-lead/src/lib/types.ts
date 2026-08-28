@@ -74,6 +74,12 @@ export interface Deal {
   confirmedAt?: string | null;
   releasedAt?: string | null;
   hasConditionalSettlement: boolean;
+  /**
+   * Raw backend trade status. DealStatus collapses the eight-state machine
+   * into four, which loses the distinction the payment screen needs: whether
+   * this trade is still awaiting payment.
+   */
+  tradeStatus?: string;
 }
 
 export interface WalletTxn {

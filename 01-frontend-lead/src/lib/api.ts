@@ -222,8 +222,26 @@ export function apiListTrades(): Promise<{ trades: ApiTrade[] }> {
 
 export function apiRequestPayment(
   tradeId: string,
-): Promise<{ trade: ApiTrade; payment: { id: string; paymentRequest: string } }> {
+): Promise<{ trade: ApiTrade; payment: ApiPayment }> {
   return request(`/api/trades/${tradeId}/payment`, { method: "POST" });
+}
+
+export interface ApiPayment {
+  id: string;
+  tradeId: string;
+  paymentRequest: string;
+  paymentHash: string;
+  amountMsat: number;
+  status: "CREATED" | "PENDING" | "PAID" | "FAILED";
+  createdAt: string;
+  paidAt?: string;
+}
+
+/** Polls the backend, which asks LND whether the invoice settled. */
+export function apiPaymentStatus(
+  paymentId: string,
+): Promise<{ payment: ApiPayment; trade: ApiTrade }> {
+  return request(`/api/payments/${paymentId}/status`);
 }
 
 export function apiConfirmDelivery(tradeId: string): Promise<{ trade: ApiTrade }> {

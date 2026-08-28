@@ -5,7 +5,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useStoreVersion } from "@/lib/store-bus";
 import { getDealsForBuyer } from "@/lib/store";
+import type { Deal } from "@/lib/types";
 import { DealRow } from "@/components/DealRow";
+import { TradePayDialog } from "@/components/TradePayDialog";
 import { Toast } from "@/components/Toast";
 
 type Filter = "all" | "pending" | "done";
@@ -16,6 +18,7 @@ export default function BuyerPayments() {
   const version = useStoreVersion();
   const [filter, setFilter] = useState<Filter>("all");
   const [toast, setToast] = useState<string | null>(null);
+  const [payTarget, setPayTarget] = useState<Deal | null>(null);
 
   const deals = useMemo(() => {
     if (!user) return [];
@@ -73,15 +76,37 @@ export default function BuyerPayments() {
           <div className="empty">{t("deal.empty.buyer")}</div>
         ) : (
           shown.map((deal) => (
-            <DealRow
-              key={deal.id}
-              deal={deal}
-              confirmableBy="buyer"
-              onConfirm={() => setToast(t("deal.confirmedMsg"))}
-            />
+            <div key={deal.id}>
+              <DealRow
+                deal={deal}
+                confirmableBy="buyer"
+                onConfirm={() => setToast(t("deal.confirmedMsg"))}
+              />
+              {/* Only AGREED trades still need paying; later states are settled. */}
+              {deal.tradeStatus === "AGREED" && (
+                <div style={{ padding: "0 0 12px 56px" }}>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => setPayTarget(deal)}
+                  >
+                    {t("pay.action")}
+                  </button>
+                </div>
+              )}
+            </div>
           ))
         )}
       </div>
+
+      {payTarget && (
+        <TradePayDialog
+          deal={payTarget}
+          onClose={(wasPaid) => {
+            setPayTarget(null);
+            if (wasPaid) setToast(t("pay.paid"));
+          }}
+        />
+      )}
 
       <Toast message={toast} />
     </div>

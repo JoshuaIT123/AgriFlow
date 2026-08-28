@@ -66,10 +66,13 @@ export default function BuyerMarketplace() {
         </div>
       ) : (
         <div className="mkt-grid">
-          {filtered.map((p) => (
+          {filtered.map((p) => {
+            // productIcon returns a component, not an element - render it.
+            const Icon = productIcon(p.category, p.unit);
+            return (
             <div className="product-card" key={p.id}>
               <div className="product-card-icon">
-                {productIcon(p.category, p.unit)}
+                <Icon size={28} aria-hidden />
               </div>
               <div className="product-card-title">{p.title}</div>
               <div className="product-card-sub">
@@ -87,7 +90,8 @@ export default function BuyerMarketplace() {
                 {t("mkt.offerAction")}
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {target && (

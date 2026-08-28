@@ -127,6 +127,7 @@ export function mapTrade(t: ApiTrade): Deal {
     confirmedAt: done ? t.updatedAt : null,
     releasedAt: t.status === "SETTLED" ? t.updatedAt : null,
     hasConditionalSettlement: true,
+    tradeStatus: t.status,
   };
 }
 
