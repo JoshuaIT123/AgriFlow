@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 import {
   expectsFreeText,
   resolveScreen,
@@ -195,7 +196,8 @@ export function UssdPhone() {
             className="btn btn-primary btn-block"
             onClick={() => router.push("/register")}
           >
-            Continue to AgriFlow →
+            Continue to AgriFlow
+            <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
           </button>
         )}
         <p className="subtle" style={{ fontSize: 12, marginTop: 12 }}>

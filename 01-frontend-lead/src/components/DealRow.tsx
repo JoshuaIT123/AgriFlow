@@ -5,6 +5,7 @@ import { confirmDelivery } from "@/lib/store";
 import { bumpStore } from "@/lib/store-bus";
 import { formatCountdown, formatDate, formatRwf, hoursUntil } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
+import { Package } from "lucide-react";
 import type { Deal } from "@/lib/types";
 import { DealBadge } from "./Badge";
 
@@ -38,7 +39,7 @@ export function DealRow({
 
   return (
     <div className="tx-row">
-      <div className="tx-icon">📦</div>
+      <div className="tx-icon" aria-hidden><Package size={22} /></div>
       <div className="tx-main">
         <div className="tx-title">{deal.productTitle}</div>
         <div className="tx-sub">

@@ -12,6 +12,7 @@ import {
 import { formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
 import { OfferBadge } from "@/components/Badge";
+import { Handshake } from "lucide-react";
 import { Toast } from "@/components/Toast";
 import { useState } from "react";
 
@@ -54,7 +55,7 @@ export default function FarmerOffers() {
         ) : (
           rows.map(({ offer, productTitle }) => (
             <div className="tx-row" key={offer.id}>
-              <div className="tx-icon">🤝</div>
+              <div className="tx-icon" aria-hidden><Handshake size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{offer.buyerName}</div>
                 <div className="tx-sub">

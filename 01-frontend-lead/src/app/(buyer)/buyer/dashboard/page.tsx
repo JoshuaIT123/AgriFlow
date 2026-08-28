@@ -16,6 +16,7 @@ import {
 } from "@/lib/store";
 import { formatDateShort, formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
+import { Handshake, Package, Wheat, ArrowRight } from "lucide-react";
 import { DealBadge, OfferBadge } from "@/components/Badge";
 
 export default function BuyerDashboard() {
@@ -76,7 +77,8 @@ export default function BuyerDashboard() {
       <div className="section-head">
         <h3>{t("mkt.title")}</h3>
         <Link href="/buyer/marketplace" className="link-btn">
-          {t("fdash.viewAll")} →
+          {t("fdash.viewAll")}
+          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
         </Link>
       </div>
       <div className="card">
@@ -85,7 +87,7 @@ export default function BuyerDashboard() {
         ) : (
           data.products.slice(0, 3).map((p) => (
             <div className="tx-row" key={p.id}>
-              <div className="tx-icon">🌾</div>
+              <div className="tx-icon" aria-hidden><Wheat size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{p.title}</div>
                 <div className="tx-sub">
@@ -102,7 +104,8 @@ export default function BuyerDashboard() {
       <div className="section-head">
         <h3>{t("offer.sent.title")}</h3>
         <Link href="/buyer/offers" className="link-btn">
-          {t("fdash.viewAll")} →
+          {t("fdash.viewAll")}
+          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
         </Link>
       </div>
       <div className="card">
@@ -111,7 +114,7 @@ export default function BuyerDashboard() {
         ) : (
           data.offers.slice(0, 3).map((o) => (
             <div className="tx-row" key={o.id}>
-              <div className="tx-icon">🤝</div>
+              <div className="tx-icon" aria-hidden><Handshake size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">
                   {data.productTitle.get(o.productId) ?? o.productId.slice(0, 6)}
@@ -130,7 +133,8 @@ export default function BuyerDashboard() {
       <div className="section-head">
         <h3>{t("fdash.deals")}</h3>
         <Link href="/buyer/payments" className="link-btn">
-          {t("fdash.viewAll")} →
+          {t("fdash.viewAll")}
+          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
         </Link>
       </div>
       <div className="card">
@@ -139,7 +143,7 @@ export default function BuyerDashboard() {
         ) : (
           data.deals.slice(0, 3).map((d) => (
             <div className="tx-row" key={d.id}>
-              <div className="tx-icon">📦</div>
+              <div className="tx-icon" aria-hidden><Package size={22} /></div>
               <div className="tx-main">
                 <div className="tx-title">{d.productTitle}</div>
                 <div className="tx-sub">

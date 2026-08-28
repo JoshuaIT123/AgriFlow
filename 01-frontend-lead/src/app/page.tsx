@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { ArrowRight, Check, Smartphone } from "lucide-react";
 import { LandingClient } from "./landing-client";
 
 const NAV = {
@@ -199,7 +200,8 @@ export default function Home() {
               href="/register"
               className="rounded-xl bg-lime-300 px-6 py-3 text-sm font-bold text-[#0b3d24] shadow-lg transition hover:bg-lime-200"
             >
-              Get started free →
+              Get started free
+              <ArrowRight size={16} aria-hidden className="ml-1 inline-block align-[-3px]" />
             </Link>
             <Link
               href="/login"
@@ -211,7 +213,8 @@ export default function Home() {
               href="/ussd"
               className="rounded-xl border border-white/40 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             >
-              📱 Try USSD (*789#)
+              <Smartphone size={16} aria-hidden className="mr-1 inline-block align-[-3px]" />
+              Try USSD (*789#)
             </Link>
           </div>
 
@@ -387,7 +390,7 @@ export default function Home() {
               ].map((item) => (
                 <li key={item} className="flex items-start gap-3 text-sm">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#1f7a4d] text-[11px] text-white">
-                    ✓
+                    <Check size={12} aria-hidden strokeWidth={3} />
                   </span>
                   <span className="text-[#3c5244]">{item}</span>
                 </li>
@@ -397,7 +400,8 @@ export default function Home() {
               href="/register"
               className="mt-8 inline-block rounded-xl border border-[#1f7a4d] px-6 py-3 text-sm font-bold text-[#1f7a4d] transition hover:bg-[#e3f1e8]"
             >
-              Explore the marketplace →
+              Explore the marketplace
+              <ArrowRight size={16} aria-hidden className="ml-1 inline-block align-[-3px]" />
             </Link>
           </div>
         </div>

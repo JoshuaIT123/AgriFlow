@@ -1,4 +1,5 @@
 import type { Unit } from "./types";
+import { Beef, Egg, Milk, Wheat, type LucideIcon } from "lucide-react";
 
 const DEFAULT_UNIT: Unit = "kg";
 
@@ -71,10 +72,13 @@ export function unitKey(unit: Unit | undefined | null): string {
 }
 
 /** Product row icon, chosen by category so livestock/dairy look right. */
-export function productIcon(category?: string | null, unit?: Unit | null): string {
+export function productIcon(
+  category?: string | null,
+  unit?: Unit | null
+): LucideIcon {
   const c = (category || "").toLowerCase();
-  if (c.includes("livestock") || unitOf(unit) === "head") return "🐄";
-  if (c.includes("poultry")) return "🐔";
-  if (c.includes("dairy") || unitOf(unit) === "litre") return "🥛";
-  return "🌾";
+  if (c.includes("livestock") || unitOf(unit) === "head") return Beef;
+  if (c.includes("poultry")) return Egg;
+  if (c.includes("dairy") || unitOf(unit) === "litre") return Milk;
+  return Wheat;
 }
