@@ -1,12 +1,14 @@
 ﻿import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/plus-jakarta-sans";
+import "@fontsource-variable/inter";
 import "./globals.css";
 import { AppProviders } from "@/lib/providers";
-import WandaaChat from "@/components/WandaaChat";
+import AgriFlowChat from "@/components/AgriFlowChat";
 
 export const metadata: Metadata = {
-  title: "AgriFlow â€” Farming, paid on delivery",
+  title: "AgriFlow — Farming, paid on delivery",
   description:
-    "A secure, simple platform that pays farmers reliably through Mobile Money.",
+    "The marketplace that pays farmers on delivery. Direct offers, escrow-secured payments and payouts through Mobile Money today — with more channels on the way.",
   applicationName: "AgriFlow",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -29,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AppProviders>{children}<WandaaChat /></AppProviders>
+        <AppProviders>{children}<AgriFlowChat /></AppProviders>
       </body>
     </html>
   );

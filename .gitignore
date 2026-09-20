@@ -1,4 +1,5 @@
 .env
+.vercel
 # dependencies
 node_modules/
 /.pnp
@@ -14,6 +15,9 @@ build/
 # misc
 .DS_Store
 *.pem
+
+# logs
+*.log
 
 # debug
 npm-debug.log*
@@ -32,4 +36,3 @@ next-env.d.ts
 # cache
 .npm-cache
 .cache
-

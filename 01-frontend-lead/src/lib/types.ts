@@ -93,6 +93,35 @@ export interface WalletTxn {
   createdAt: string;
 }
 
+/*
+ * P2P trading chat. Because the backend has no messaging model yet, threads
+ * and messages live in the same client-side store as walletTxns. A thread
+ * joins two participants (a farmer and a buyer) around one product.
+ */
+export type ChatMessageKind = "text" | "system";
+
+export interface ChatThread {
+  id: string;
+  participantIds: [string, string];
+  participants: Record<string, { name: string; role: Role }>;
+  productId?: string;
+  productTitle?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  senderId: string;
+  kind: ChatMessageKind;
+  text: string;
+  createdAt: string;
+  readBy: string[];
+  /** Extra context for system messages (who joined, what product). */
+  meta?: { name?: string; productTitle?: string };
+}
+
 export type ArrangementStatus = "active" | "paused" | "archived";
 
 export interface BuyerArrangement {

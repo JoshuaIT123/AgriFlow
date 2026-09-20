@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useStoreVersion } from "@/lib/store-bus";
 import { getDealsForFarmer } from "@/lib/store";
 import { DealRow } from "@/components/DealRow";
 import { Toast } from "@/components/Toast";
-import { useState } from "react";
+import { Inbox } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type Filter = "all" | "pending" | "done";
 
@@ -42,42 +44,56 @@ export default function FarmerPayments() {
   ];
 
   return (
-    <div className="container">
-      <h2 style={{ fontSize: 20, marginBottom: 6 }}>{t("deal.title")}</h2>
-      <p className="subtle" style={{ margin: "0 0 16px" }}>
-        {t("deal.subtitle")}
-      </p>
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          {t("deal.title")}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t("deal.subtitle")}</p>
+      </div>
 
-      <div
-        className="row"
-        style={{ gap: 8, marginBottom: 12, justifyContent: "flex-start", flexWrap: "wrap" }}
-      >
+      {/* Filter pills */}
+      <div className="flex flex-wrap gap-2">
         {filters.map((f) => (
           <button
             key={f.key}
-            className={`btn btn-sm ${filter === f.key ? "btn-primary" : "btn-ghost"}`}
             onClick={() => setFilter(f.key)}
             aria-pressed={filter === f.key}
+            className={cn(
+              "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+              filter === f.key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted text-muted-foreground hover:bg-muted/70"
+            )}
           >
             {f.label} ({f.count})
           </button>
         ))}
       </div>
 
-      <div className="card">
-        {shown.length === 0 ? (
-          <div className="empty">{t("deal.empty.farmer")}</div>
-        ) : (
-          shown.map((deal) => (
-            <DealRow
-              key={deal.id}
-              deal={deal}
-              confirmableBy="farmer"
-              onConfirm={() => setToast(t("deal.confirmedMsg"))}
-            />
-          ))
-        )}
-      </div>
+      <Card className="gap-0 p-0">
+        <CardContent className="px-4 sm:px-5">
+          {shown.length === 0 ? (
+            <div className="py-16 text-center">
+              <span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <Inbox size={24} aria-hidden />
+              </span>
+              <p className="text-sm text-muted-foreground">{t("deal.empty.farmer")}</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {shown.map((deal) => (
+                <DealRow
+                  key={deal.id}
+                  deal={deal}
+                  confirmableBy="farmer"
+                  onConfirm={() => setToast(t("deal.confirmedMsg"))}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Toast message={toast} />
     </div>

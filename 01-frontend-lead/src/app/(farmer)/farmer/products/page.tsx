@@ -14,8 +14,23 @@ import { formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
 import type { Unit } from "@/lib/types";
 import { ProductBadge } from "@/components/Badge";
-import { Wheat } from "lucide-react";
 import { Toast } from "@/components/Toast";
+import { CircleAlert, PackagePlus, Sprout } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const CATEGORIES = [
   "prod.category.tubers",
@@ -30,6 +45,9 @@ const CATEGORIES = [
 ] as const;
 
 const UNITS: Unit[] = ["kg", "head", "litre", "unit", "dozen", "crate", "bunch"];
+
+const selectClass =
+  "h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function FarmerProducts() {
   const { user } = useAuth();
@@ -56,6 +74,15 @@ export default function FarmerProducts() {
 
   if (!user) return null;
 
+  const resetForm = () => {
+    setTitle("");
+    setQty("");
+    setPrice("");
+    setCategory(CATEGORIES[0]);
+    setUnit("kg");
+    setError(null);
+  };
+
   const post = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -78,44 +105,134 @@ export default function FarmerProducts() {
       setError(t("auth.err.required"));
       return;
     }
-    setTitle("");
-    setQty("");
-    setPrice("");
-    setCategory(CATEGORIES[0]);
-    setUnit("kg");
+    resetForm();
     setShowForm(false);
     setToast(t("prod.posted"));
   };
 
   return (
-    <div className="container">
-      <div className="section-head" style={{ marginTop: 0 }}>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 style={{ fontSize: 20, margin: 0 }}>{t("prod.title")}</h2>
-          <p className="subtle" style={{ margin: "4px 0 0" }}>
-            {t("prod.subtitle")}
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            {t("prod.title")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("prod.subtitle")}</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowForm((v) => !v)}>
-          + {t("prod.post")}
-        </button>
+        <Button onClick={() => setShowForm(true)} className="h-11">
+          <PackagePlus size={16} aria-hidden />
+          {t("prod.post")}
+        </Button>
       </div>
 
-      {showForm && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <form onSubmit={post} noValidate>
-            <div className="field">
-              <label htmlFor="ptitle">{t("prod.titleField")}</label>
-              <input
+      {/* List */}
+      <Card className="gap-0 p-0">
+        <CardContent className="p-0">
+          {products.length === 0 ? (
+            <div className="px-4 py-16 text-center">
+              <span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <Sprout size={24} aria-hidden />
+              </span>
+              <p className="text-sm text-muted-foreground">{t("prod.empty")}</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => setShowForm(true)}
+              >
+                <PackagePlus size={16} aria-hidden />
+                {t("prod.post")}
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {products.map(({ product, offerCount }) => (
+                <div
+                  key={product.id}
+                  className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5"
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <Sprout size={18} aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">
+                      {product.title}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>
+                        {product.category} · {product.quantityKg}{" "}
+                        {t(unitKey(unitOf(product.unit)))} ·{" "}
+                        {formatRwf(product.pricePerKg)}/
+                        {t(unitKey(unitOf(product.unit)))}
+                      </span>
+                      <ProductBadge status={product.status} />
+                      {product.status === "available" && offerCount > 0 && (
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700">
+                          {offerCount} {t("prod.offers")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-semibold">
+                      {formatRwf(product.pricePerKg * product.quantityKg)}
+                    </span>
+                    {product.status === "available" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setProductStatus(product.id, "sold")}
+                      >
+                        {t("prod.markSold")}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setProductStatus(product.id, "available")}
+                      >
+                        {t("prod.relist")}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Post dialog */}
+      <Dialog open={showForm} onOpenChange={(o) => setShowForm(o)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("prod.post")}</DialogTitle>
+            <DialogDescription>{t("prod.subtitle")}</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={post} noValidate className="space-y-4">
+            {error && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm font-medium text-red-700">
+                <CircleAlert size={17} className="mt-0.5 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ptitle">{t("prod.titleField")}</Label>
+              <Input
                 id="ptitle"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("prod.titleField")}
               />
             </div>
-            <div className="field">
-              <label htmlFor="pcat">{t("prod.category")}</label>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pcat">{t("prod.category")}</Label>
               <select
                 id="pcat"
+                className={selectClass}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
@@ -126,105 +243,66 @@ export default function FarmerProducts() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="punit">{t("unit.quantity")}</label>
-              <select
-                id="punit"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value as Unit)}
-              >
-                {UNITS.map((u) => (
-                  <option key={u} value={u}>
-                    {t(unitKey(u))}
-                  </option>
-                ))}
-              </select>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="punit">{t("unit.quantity")}</Label>
+                <select
+                  id="punit"
+                  className={selectClass}
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value as Unit)}
+                >
+                  {UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {t(unitKey(u))}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pqty">{t("unit.quantity")}</Label>
+                <Input
+                  id="pqty"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
             </div>
-            <div className="field">
-              <label htmlFor="pqty">{t("unit.quantity")}</label>
-              <input
-                id="pqty"
-                type="number"
-                inputMode="numeric"
-                min="1"
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="pprice">{t("unit.price")}</label>
-              <input
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pprice">{t("unit.price")}</Label>
+              <Input
                 id="pprice"
                 type="number"
                 inputMode="numeric"
                 min="1"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
+                placeholder="0"
               />
             </div>
-            {error && <div className="form-error">{error}</div>}
-            <div className="row" style={{ gap: 10 }}>
-              <button className="btn btn-ghost" type="button" onClick={() => setShowForm(false)}>
-                {t("prod.cancel")}
-              </button>
-              <button className="btn btn-primary btn-block" type="submit">
-                {t("prod.submit")}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
-      <div className="card">
-        {products.length === 0 ? (
-          <div className="empty">{t("prod.empty")}</div>
-        ) : (
-          products.map(({ product, offerCount }) => (
-            <div className="tx-row" key={product.id}>
-              <div className="tx-icon" aria-hidden><Wheat size={22} /></div>
-              <div className="tx-main">
-                <div className="tx-title">{product.title}</div>
-                <div className="tx-sub">
-                  {product.category} · {product.quantityKg} {t(unitKey(unitOf(product.unit)))}{" "}
-                  · {formatRwf(product.pricePerKg)}/{t(unitKey(unitOf(product.unit)))}
-                </div>
-                <div style={{ marginTop: 6 }}>
-                  <ProductBadge status={product.status} />
-                  {product.status === "available" && offerCount > 0 && (
-                    <span className="badge badge-pending" style={{ marginLeft: 6 }}>
-                      {offerCount} {t("prod.offers")}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="tx-side">
-                <div className="tx-amount mono">{formatRwf(product.pricePerKg * product.quantityKg)}</div>
-                {product.status === "available" ? (
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    style={{ marginTop: 8 }}
-                    onClick={() => {
-                      setProductStatus(product.id, "sold");
-                    }}
-                  >
-                    {t("prod.markSold")}
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-sm btn-secondary"
-                    style={{ marginTop: 8 }}
-                    onClick={() => {
-                      setProductStatus(product.id, "available");
-                    }}
-                  >
-                    {t("prod.relist")}
-                  </button>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  resetForm();
+                  setShowForm(false);
+                }}
+              >
+                {t("prod.cancel")}
+              </Button>
+              <Button type="submit">{t("prod.submit")}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Toast message={toast} />
     </div>

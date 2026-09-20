@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Smartphone } from "lucide-react";
 import { UssdPhone } from "@/components/UssdPhone";
+import { Button } from "@/components/ui/button";
 
 export const metadata = {
   title: "AgriFlow — USSD demo",
@@ -9,18 +10,26 @@ export const metadata = {
 
 export default function UssdPage() {
   return (
-    <div className="container" style={{ paddingTop: 24 }}>
-      <div className="section-head" style={{ marginTop: 0 }}>
+    <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-10">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 style={{ fontSize: 22, margin: 0 }}>AgriFlow over USSD</h1>
-          <p className="subtle" style={{ margin: "4px 0 0" }}>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-primary">
+            <Smartphone size={13} aria-hidden />
+            USSD demo
+          </div>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">
+            AgriFlow over USSD
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             The same marketplace, on a 2G feature phone.
           </p>
         </div>
-        <Link className="btn btn-ghost btn-sm" href="/">
-          <ArrowLeft size={14} aria-hidden style={{ verticalAlign: "-2px", marginRight: 4 }} />
-          Home
-        </Link>
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/">
+            <ArrowLeft size={14} aria-hidden />
+            Home
+          </Link>
+        </Button>
       </div>
       <UssdPhone />
     </div>

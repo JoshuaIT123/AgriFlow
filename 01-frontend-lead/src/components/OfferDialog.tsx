@@ -7,6 +7,19 @@ import { bumpStore } from "@/lib/store-bus";
 import { formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
 import type { Deal, Product } from "@/lib/types";
+import { CircleAlert, Handshake } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 export function OfferDialog({
   product,
@@ -24,6 +37,7 @@ export function OfferDialog({
   const [qty, setQty] = useState(String(Math.min(product.quantityKg, 100)));
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -34,6 +48,7 @@ export function OfferDialog({
       setError(t("auth.err.required"));
       return;
     }
+    setBusy(true);
     const res = await placeOffer({
       productId: product.id,
       buyerId,
@@ -42,88 +57,86 @@ export function OfferDialog({
       quantityKg: q,
       message,
     });
+    setBusy(false);
     bumpStore();
     // An offer meeting the asking price comes back with its trade already
     // open, so the caller can go straight to payment.
     onClose(res.ok ? "done" : "exists", res.deal);
   };
 
+  const unit = t(unitKey(unitOf(product.unit)));
+
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(21,36,28,0.5)",
-        display: "grid",
-        placeItems: "end center",
-        zIndex: 60,
-        padding: 0,
-      }}
-      onClick={() => onClose()}
-    >
-      <div
-        className="card"
-        style={{
-          width: "100%",
-          maxWidth: 480,
-          borderBottomLeftRadius: 0,
-          borderBottomRightRadius: 0,
-          boxShadow: "var(--shadow-md)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={{ marginBottom: 2 }}>{t("offer.make.title")}</h3>
-        <p className="subtle" style={{ margin: "0 0 4px" }}>
-          {product.title} · {product.quantityKg} {t(unitKey(unitOf(product.unit)))}{" "}
-          · {formatRwf(product.pricePerKg)}/{t(unitKey(unitOf(product.unit)))}
-        </p>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("offer.make.title")}</DialogTitle>
+          <DialogDescription>
+            {product.title} · {product.quantityKg} {unit} ·{" "}
+            {formatRwf(product.pricePerKg)}/{unit}
+          </DialogDescription>
+        </DialogHeader>
 
-        {error && <div className="form-error">{error}</div>}
+        {error && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm font-medium text-red-700">
+            <CircleAlert size={17} className="mt-0.5 shrink-0" />
+            {error}
+          </div>
+        )}
 
-        <form onSubmit={submit} noValidate>
-          <div className="field">
-            <label htmlFor="oprice">
-              {t("offer.make.price")}
-            </label>
-            <input
-              id="oprice"
-              type="number"
-              inputMode="numeric"
-              min="1"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
+        <form onSubmit={submit} noValidate className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="oprice">{t("offer.make.price")}</Label>
+              <Input
+                id="oprice"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="oqty">{t("offer.make.qty")}</Label>
+              <Input
+                id="oqty"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max={product.quantityKg}
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="field">
-            <label htmlFor="oqty">{t("offer.make.qty")}</label>
-            <input
-              id="oqty"
-              type="number"
-              inputMode="numeric"
-              min="1"
-              max={product.quantityKg}
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="omsg">{t("offer.make.msg")}</label>
-            <input
+
+          <div className="space-y-1.5">
+            <Label htmlFor="omsg">{t("offer.make.msg")}</Label>
+            <Textarea
               id="omsg"
+              rows={3}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
           </div>
-          <div className="row" style={{ gap: 10 }}>
-            <button className="btn btn-ghost" type="button" onClick={() => onClose()}>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onClose()}
+              disabled={busy}
+            >
               {t("offer.make.cancel")}
-            </button>
-            <button className="btn btn-primary btn-block" type="submit">
-              {t("offer.make.submit")}
-            </button>
-          </div>
+            </Button>
+            <Button type="submit" disabled={busy}>
+              <Handshake size={16} aria-hidden />
+              {busy ? t("common.loading") : t("offer.make.submit")}
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

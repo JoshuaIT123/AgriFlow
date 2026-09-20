@@ -13,6 +13,8 @@ import { cachedDeals, cachedOffers, cachedProducts, mapTrade, refresh } from "./
 import type {
   Account,
   BuyerArrangement,
+  ChatMessage,
+  ChatThread,
   Deal,
   Locale,
   Offer,
@@ -38,17 +40,21 @@ export interface StoredAccount extends Account {
 
 /*
  * Products, offers and trades live on the backend (see remote.ts). Only the
- * wallet and recurring arrangements remain local: the API has no model for
- * either yet, so they stay client-side rather than being silently dropped.
+ * wallet, recurring arrangements and the P2P chat remain local: the API has no
+ * model for them yet, so they stay client-side rather than being dropped.
  */
 interface Data {
   walletTxns: WalletTxn[];
   arrangements: BuyerArrangement[];
+  chatThreads: ChatThread[];
+  chatMessages: ChatMessage[];
 }
 
 const EMPTY: Data = {
   walletTxns: [],
   arrangements: [],
+  chatThreads: [],
+  chatMessages: [],
 };
 
 /*
@@ -80,6 +86,8 @@ function readData(): Data {
     return {
       walletTxns: Array.isArray(p.walletTxns) ? p.walletTxns : [],
       arrangements: Array.isArray(p.arrangements) ? p.arrangements : [],
+      chatThreads: Array.isArray(p.chatThreads) ? p.chatThreads : [],
+      chatMessages: Array.isArray(p.chatMessages) ? p.chatMessages : [],
     };
   } catch {
     return EMPTY;
@@ -197,6 +205,11 @@ export function getAccount(id: string | null): StoredAccount | null {
   return readAccounts().find((a) => a.id === id) ?? null;
 }
 
+/** All demo accounts recorded on this device (used by the admin console). */
+export function getAllAccounts(): StoredAccount[] {
+  return [...readAccounts()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /* ---------------- Accessors (read-only slices) ---------------- */
 
 /*
@@ -283,6 +296,128 @@ export function simulateWalletTopUp(accountId: string, amount: number) {
     createdAt: new Date().toISOString(),
   });
   writeData(data);
+}
+
+/** Every wallet transaction on this device, newest first (admin console). */
+export function getAllWalletTxns(): WalletTxn[] {
+  return [...readData().walletTxns].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt)
+  );
+}
+
+/* ---------------- P2P chat ---------------- */
+
+export function getChatThreads(): ChatThread[] {
+  return [...readData().chatThreads].sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt)
+  );
+}
+
+export function getChatThread(id: string): ChatThread | undefined {
+  return readData().chatThreads.find((th) => th.id === id);
+}
+
+export function getChatMessages(threadId: string): ChatMessage[] {
+  return readData()
+    .chatMessages.filter((m) => m.threadId === threadId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/** The other side of a thread when seen from the given account. */
+export function chatCounterpart(thread: ChatThread, userId: string) {
+  return thread.participants[thread.participantIds.find((id) => id !== userId) ?? ""];
+}
+
+/**
+ * Returns an existing thread between the same two people about the same
+ * product, or creates it with a system "you're connected" opener. P2P chat is
+ * local for now, so both demo accounts share one store on this device.
+ */
+export function openChatThread(input: {
+  self: { id: string; name: string; role: Role };
+  counterpart: { id: string; name: string; role: Role };
+  productId?: string;
+  productTitle?: string;
+}): ChatThread {
+  const data = readData();
+  const existing = data.chatThreads.find(
+    (th) =>
+      th.participantIds.includes(input.self.id) &&
+      th.participantIds.includes(input.counterpart.id) &&
+      th.productId === (input.productId ?? null)
+  );
+  if (existing) return existing;
+
+  const now = new Date().toISOString();
+  const thread: ChatThread = {
+    id: uid(),
+    participantIds: [input.self.id, input.counterpart.id],
+    participants: {
+      [input.self.id]: { name: input.self.name, role: input.self.role },
+      [input.counterpart.id]: {
+        name: input.counterpart.name,
+        role: input.counterpart.role,
+      },
+    },
+    productId: input.productId,
+    productTitle: input.productTitle,
+    createdAt: now,
+    updatedAt: now,
+  };
+  data.chatThreads.push(thread);
+  data.chatMessages.push({
+    id: uid(),
+    threadId: thread.id,
+    senderId: input.self.id,
+    kind: "system",
+    text: "",
+    createdAt: now,
+    readBy: [input.self.id],
+    meta: { name: input.counterpart.name, productTitle: input.productTitle },
+  });
+  writeData(data);
+  return thread;
+}
+
+export function sendChatMessage(
+  threadId: string,
+  sender: { id: string; name: string },
+  text: string
+): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const data = readData();
+  data.chatMessages.push({
+    id: uid(),
+    threadId,
+    senderId: sender.id,
+    kind: "text",
+    text: trimmed,
+    createdAt: new Date().toISOString(),
+    readBy: [sender.id],
+  });
+  const thread = data.chatThreads.find((th) => th.id === threadId);
+  if (thread) thread.updatedAt = new Date().toISOString();
+  writeData(data);
+}
+
+export function markChatThreadRead(threadId: string, userId: string): void {
+  const data = readData();
+  let changed = false;
+  for (const m of data.chatMessages) {
+    if (m.threadId === threadId && !m.readBy.includes(userId)) {
+      m.readBy.push(userId);
+      changed = true;
+    }
+  }
+  if (changed) writeData(data);
+}
+
+/** Total unread messages across all conversations (drives the nav badge). */
+export function getUnreadChatCount(userId: string): number {
+  return readData().chatMessages.filter(
+    (m) => m.kind === "text" && m.senderId !== userId && !m.readBy.includes(userId)
+  ).length;
 }
 
 /* ---------------- Product / Offer / Deal mutations ---------------- */

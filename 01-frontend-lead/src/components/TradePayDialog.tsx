@@ -6,6 +6,16 @@ import { apiPaymentStatus, apiRequestPayment, type ApiPayment } from "@/lib/api"
 import { refresh } from "@/lib/remote";
 import { formatRwf } from "@/lib/format";
 import type { Deal } from "@/lib/types";
+import { CircleAlert, CheckCircle2, Copy, QrCode, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /*
  * Buyer pays for an accepted trade over Lightning.
@@ -154,54 +164,79 @@ export function TradePayDialog({
   };
 
   return (
-    <div style={S.backdrop} onClick={() => onClose(paid)}>
-      <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ margin: 0, fontSize: 18 }}>{t("pay.title")}</h3>
-        <p className="subtle" style={{ margin: "4px 0 14px" }}>
-          {deal.productTitle} · {formatRwf(deal.amountRwf)}
-        </p>
+    <Dialog open onOpenChange={(o) => !o && onClose(paid)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("pay.title")}</DialogTitle>
+          <DialogDescription>
+            {deal.productTitle} · {formatRwf(deal.amountRwf)}
+          </DialogDescription>
+        </DialogHeader>
 
-        {error && <div className="form-error">{error}</div>}
+        {error && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm font-medium text-red-700">
+            <CircleAlert size={17} className="mt-0.5 shrink-0" />
+            {error}
+          </div>
+        )}
 
         {paid ? (
-          <div style={S.paid}>
-            <div style={{ fontSize: 40 }}>✅</div>
-            <div style={{ fontWeight: 700, marginTop: 6 }}>{t("pay.paid")}</div>
-            <p className="subtle" style={{ marginTop: 6 }}>
-              {t("pay.paidNote")}
-            </p>
-            <button className="btn btn-primary btn-block" onClick={() => onClose(true)}>
+          <div className="flex flex-col items-center gap-2 py-4 text-center">
+            <span className="grid size-16 place-items-center rounded-full bg-emerald-500/10 text-emerald-600">
+              <CheckCircle2 size={34} aria-hidden />
+            </span>
+            <div className="text-lg font-bold">{t("pay.paid")}</div>
+            <p className="text-sm text-muted-foreground">{t("pay.paidNote")}</p>
+            <Button className="mt-3 w-full" onClick={() => onClose(true)}>
               {t("pay.done")}
-            </button>
+            </Button>
           </div>
         ) : !payment ? (
-          <>
-            <p className="subtle">{t("pay.intro")}</p>
-            <button className="btn btn-primary btn-block" onClick={start} disabled={busy}>
+          <div className="flex flex-col gap-3 py-2">
+            <p className="text-sm text-muted-foreground">{t("pay.intro")}</p>
+            <Button onClick={start} disabled={busy} className="w-full">
+              <Zap size={16} aria-hidden />
               {busy ? t("pay.creating") : t("pay.create")}
-            </button>
-            <button className="btn btn-ghost btn-block" onClick={() => onClose(false)}>
+            </Button>
+            <Button variant="ghost" onClick={() => onClose(false)}>
               {t("prod.cancel")}
-            </button>
-          </>
+            </Button>
+          </div>
         ) : (
-          <>
-            {qr && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={qr} alt="Lightning invoice QR" style={S.qr} />
-            )}
-            <div style={S.invoice}>{payment.paymentRequest}</div>
-            <div className="row" style={{ gap: 8, alignItems: "center" }}>
-              <button className="btn btn-secondary btn-sm" onClick={copy}>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4">
+              {qr ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={qr}
+                  alt="Lightning invoice QR"
+                  className="mx-auto block h-52 w-52 rounded-xl bg-white p-1 shadow-sm"
+                />
+              ) : (
+                <div className="flex h-52 flex-col items-center justify-center gap-2 text-muted-foreground">
+                  <QrCode size={28} aria-hidden />
+                  <span className="text-xs">{t("pay.waiting")}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-muted/40 px-3 py-2.5 font-mono text-[11px] leading-relaxed break-all">
+              {payment.paymentRequest}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={copy}>
+                <Copy size={13} aria-hidden />
                 {copied ? t("pay.copied") : t("pay.copy")}
-              </button>
+              </Button>
               {left > 0 && !cancelled && (
                 <>
-                  <span style={S.countdown}>
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 font-mono text-xs font-bold text-emerald-700">
                     {t("pay.autoIn")} {left}s
                   </span>
-                  <button
-                    className="btn btn-ghost btn-sm"
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => {
                       cancelledRef.current = true;
                       setCancelled(true);
@@ -209,10 +244,10 @@ export function TradePayDialog({
                     }}
                   >
                     {t("pay.cancel")}
-                  </button>
+                  </Button>
                 </>
               )}
-              <span className="subtle" style={{ fontSize: 12 }}>
+              <span className="ml-auto text-xs text-muted-foreground">
                 {autoPaying
                   ? t("pay.autoPaying")
                   : cancelled
@@ -220,55 +255,15 @@ export function TradePayDialog({
                     : t("pay.waiting")}
               </span>
             </div>
-            <button className="btn btn-ghost btn-block" onClick={() => onClose(false)}>
-              {t("pay.later")}
-            </button>
-          </>
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => onClose(false)}>
+                {t("pay.later")}
+              </Button>
+            </DialogFooter>
+          </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
-
-const S: Record<string, React.CSSProperties> = {
-  backdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(21,36,28,.5)",
-    display: "grid",
-    placeItems: "center",
-    zIndex: 70,
-    padding: 16,
-  },
-  sheet: {
-    background: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    width: "100%",
-    maxWidth: 380,
-    maxHeight: "90vh",
-    overflowY: "auto",
-  },
-  qr: { display: "block", margin: "0 auto 12px", width: 220, height: 220 },
-  invoice: {
-    fontFamily: "ui-monospace, monospace",
-    fontSize: 10,
-    wordBreak: "break-all",
-    background: "#f1f5f9",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-    maxHeight: 90,
-    overflowY: "auto",
-  },
-  paid: { textAlign: "center" },
-  countdown: {
-    fontFamily: "ui-monospace, monospace",
-    fontWeight: 700,
-    color: "#166534",
-    background: "#dcfce7",
-    borderRadius: 999,
-    padding: "4px 10px",
-    fontSize: 12,
-  },
-};

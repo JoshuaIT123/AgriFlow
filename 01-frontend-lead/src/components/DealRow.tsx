@@ -5,9 +5,10 @@ import { confirmDelivery } from "@/lib/store";
 import { bumpStore } from "@/lib/store-bus";
 import { formatCountdown, formatDate, formatRwf, hoursUntil } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
-import { Package } from "lucide-react";
+import { Check, Package } from "lucide-react";
 import type { Deal } from "@/lib/types";
 import { DealBadge } from "./Badge";
+import { Button } from "@/components/ui/button";
 
 function releaseDeadline(deal: Deal): string {
   return new Date(
@@ -38,44 +39,45 @@ export function DealRow({
   };
 
   return (
-    <div className="tx-row">
-      <div className="tx-icon" aria-hidden><Package size={22} /></div>
-      <div className="tx-main">
-        <div className="tx-title">{deal.productTitle}</div>
-        <div className="tx-sub">
+    <div className="flex flex-wrap items-center gap-3 py-3.5">
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+        <Package size={19} aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">{deal.productTitle}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
           {confirmableBy === "farmer"
             ? `${t("deal.from")} ${deal.buyerName}`
             : `${t("deal.to")} ${deal.farmerName}`}{" "}
           · {deal.quantityKg} {t(unitKey(unitOf(deal.unit)))} ·{" "}
           {deal.hasConditionalSettlement ? "escrow" : "direct"}
         </div>
-        <div style={{ marginTop: 6 }}>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <DealBadge status={deal.status} />
+          {showCountdown && (
+            <span className="font-mono text-xs font-bold text-amber-600">
+              {formatCountdown(t("deal.countdown"), leftover)}
+            </span>
+          )}
         </div>
       </div>
-      <div className="tx-side">
-        <div className="tx-amount mono">{formatRwf(deal.amountRwf)}</div>
-        <div className="tx-meta">
+      <div className="flex flex-col items-end gap-2">
+        <span className="font-mono text-sm font-bold">
+          {formatRwf(deal.amountRwf)}
+        </span>
+        <span className="text-xs text-muted-foreground">
           {formatDate(deal.createdAt, locale === "rw" ? "en" : locale)}
-        </div>
-        {showCountdown && (
-          <div
-            className="tx-meta mono"
-            style={{ color: "var(--warning)", fontWeight: 700 }}
-          >
-            {formatCountdown(t("deal.countdown"), leftover)}
-          </div>
-        )}
+        </span>
         {canConfirm && deal.status === "pending_delivery" && (
-          <button
-            className="btn btn-sm btn-primary"
-            style={{ marginTop: 8 }}
+          <Button
+            size="sm"
             onClick={handleConfirm}
           >
+            <Check size={14} aria-hidden />
             {confirmableBy === "farmer"
               ? t("deal.confirm")
               : t("deal.confirmByBuyer")}
-          </button>
+          </Button>
         )}
       </div>
     </div>

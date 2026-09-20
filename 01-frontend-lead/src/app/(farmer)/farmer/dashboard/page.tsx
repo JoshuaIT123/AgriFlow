@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useStoreVersion } from "@/lib/store-bus";
@@ -12,10 +13,26 @@ import {
 } from "@/lib/store";
 import { formatDateShort, formatRwf } from "@/lib/format";
 import { unitKey, unitOf } from "@/lib/units";
-import { Handshake, Package, Wheat, ArrowRight } from "lucide-react";
-import { useMemo } from "react";
+import {
+  ArrowRight,
+  Handshake,
+  Loader,
+  Package,
+  Plus,
+  Sprout,
+  TrendingUp,
+  Wallet,
+  Wheat,
+} from "lucide-react";
 import { ProductBadge, OfferBadge, DealBadge } from "@/components/Badge";
 import { PredictionPanel } from "@/components/PredictionPanel";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export default function FarmerDashboard() {
   const { user } = useAuth();
@@ -46,123 +63,241 @@ export default function FarmerDashboard() {
   );
   const liveProducts = data.products.filter((p) => p.status === "available");
 
+  const today = new Date().toLocaleDateString(displayLocale, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  const stats = [
+    { icon: Wheat, value: liveProducts.length, label: t("fdash.stat.products") },
+    { icon: Handshake, value: pendingOffers.length, label: t("fdash.stat.pendingOffers") },
+    { icon: Package, value: pendingDeals.length, label: t("fdash.stat.activeDeals") },
+  ];
+
   return (
-    <div className="container">
-      <h2 style={{ marginBottom: 14, fontSize: 20 }}>
-        {t("fdash.title")}, {user.name.split(" ")[0]} 👋
-      </h2>
-
-      <div className="balance-card">
-        <div className="label">{t("wallet.balance")}</div>
-        <div className="value mono">{formatRwf(data.balance)}</div>
-        <div className="sub">
-          {t("fdash.incoming")}:{" "}
-          <strong className="mono">{formatRwf(data.incoming)}</strong>
+    <div className="space-y-6">
+      {/* Greeting */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-widest text-primary">
+          {t("nav.dashboard")}
         </div>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+          {t("fdash.title")}, {user.name.split(" ")[0]}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{today}</p>
       </div>
 
-      <div className="stat-grid">
-        <div className="stat">
-          <div className="num mono">{liveProducts.length}</div>
-          <div className="lbl">{t("fdash.stat.products")}</div>
-        </div>
-        <div className="stat">
-          <div className="num mono">{pendingOffers.length}</div>
-          <div className="lbl">{t("fdash.stat.pendingOffers")}</div>
-        </div>
-        <div className="stat">
-          <div className="num mono">{pendingDeals.length}</div>
-          <div className="lbl">{t("fdash.stat.activeDeals")}</div>
-        </div>
-      </div>
-
-      <div className="section-head">
-        <h3>{t("fdash.products")}</h3>
-        <Link href="/farmer/products" className="link-btn">
-          {t("fdash.viewAll")}
-          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
-        </Link>
-      </div>
-      <div className="card">
-        {data.products.length === 0 ? (
-          <div className="empty">{t("fdash.empty")}</div>
-        ) : (
-          data.products.slice(0, 3).map((p) => (
-            <div className="tx-row" key={p.id}>
-              <div className="tx-icon" aria-hidden><Wheat size={22} /></div>
-              <div className="tx-main">
-                <div className="tx-title">{p.title}</div>
-                <div className="tx-sub">
-                  {p.quantityKg} {t(unitKey(unitOf(p.unit)))} ·{" "}
-                  {formatRwf(p.pricePerKg)}/{t(unitKey(unitOf(p.unit)))}
-                </div>
+      {/* Balance hero */}
+      <Card className="overflow-hidden border-0 bg-gradient-to-br from-[#08301f] via-[#0d4a2d] to-[#146b3d] text-white shadow-lg shadow-emerald-950/20">
+        <CardContent className="p-6 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-sm font-medium text-white/70">
+                {t("wallet.balance")}
               </div>
-              <ProductBadge status={p.status} />
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="section-head">
-        <h3>{t("fdash.offers")}</h3>
-        <Link href="/farmer/offers" className="link-btn">
-          {t("fdash.viewAll")}
-          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
-        </Link>
-      </div>
-      <div className="card">
-        {data.offers.length === 0 ? (
-          <div className="empty">{t("offer.noOffers")}</div>
-        ) : (
-          data.offers.slice(0, 3).map((o) => (
-            <div className="tx-row" key={o.id}>
-              <div className="tx-icon" aria-hidden><Handshake size={22} /></div>
-              <div className="tx-main">
-                <div className="tx-title">{o.buyerName}</div>
-                <div className="tx-sub">
-                  {formatRwf(o.pricePerKg)}/{t(unitKey(unitOf(o.unit)))} ·{" "}
-                  {o.quantityKg} {t(unitKey(unitOf(o.unit)))}{" "}
-                  {t("offer.on")} {o.productId.slice(0, 6)}
-                </div>
+              <div className="mt-1 font-mono text-3xl font-bold tracking-tight sm:text-4xl">
+                {formatRwf(data.balance)}
               </div>
-              <OfferBadge status={o.status} />
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="section-head">
-        <h3>{t("fdash.deals")}</h3>
-        <Link href="/farmer/payments" className="link-btn">
-          {t("fdash.viewAll")}
-          <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px", marginLeft: 4 }} />
-        </Link>
-      </div>
-      <div className="card">
-        {data.deals.length === 0 ? (
-          <div className="empty">{t("deal.empty.farmer")}</div>
-        ) : (
-          data.deals.slice(0, 3).map((d) => (
-            <div className="tx-row" key={d.id}>
-              <div className="tx-icon" aria-hidden><Package size={22} /></div>
-              <div className="tx-main">
-                <div className="tx-title">{d.productTitle}</div>
-                <div className="tx-sub">
-                  {d.buyerName} ·{" "}
-                  {formatDateShort(d.createdAt, displayLocale)}
-                </div>
-              </div>
-              <div className="tx-side">
-                <div className="tx-amount mono">{formatRwf(d.amountRwf)}</div>
-                <div style={{ marginTop: 4 }}>
-                  <DealBadge status={d.status} />
-                </div>
+              <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-lime-300">
+                <TrendingUp size={13} aria-hidden />
+                {t("fdash.incoming")}:{" "}
+                <span className="font-mono font-semibold">
+                  {formatRwf(data.incoming)}
+                </span>
               </div>
             </div>
-          ))
-        )}
+            <div className="flex flex-wrap gap-2.5">
+              <Button
+                asChild
+                variant="secondary"
+                className="h-11 bg-white text-emerald-950 hover:bg-lime-50"
+              >
+                <Link href="/farmer/products">
+                  <Plus size={16} aria-hidden />
+                  {t("prod.post")}
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="ghost"
+                className="h-11 text-white hover:bg-white/10 hover:text-white"
+              >
+                <Link href="/farmer/wallet">
+                  <Wallet size={16} aria-hidden />
+                  {t("wallet.title")}
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {stats.map((s) => {
+          const Icon = s.icon;
+          return (
+            <Card key={s.label} className="gap-0 p-0">
+              <CardContent className="flex items-center gap-3.5 p-4 sm:p-5">
+                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                  <Icon size={20} aria-hidden />
+                </span>
+                <div>
+                  <div className="font-mono text-2xl font-bold leading-none tracking-tight">
+                    {s.value}
+                  </div>
+                  <div className="mt-1 text-xs font-medium text-muted-foreground">
+                    {s.label}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
+
+      {/* Products + Offers */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Products */}
+        <Card className="gap-0 p-0">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base">{t("fdash.products")}</CardTitle>
+            <Link
+              href="/farmer/products"
+              className="flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+            >
+              {t("fdash.viewAll")}
+              <ArrowRight size={14} aria-hidden />
+            </Link>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {data.products.length === 0 ? (
+              <div className="rounded-xl bg-accent/60 px-4 py-6 text-center text-sm text-muted-foreground">
+                {t("fdash.empty")}
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {data.products.slice(0, 3).map((p) => (
+                  <div key={p.id} className="flex items-center gap-3 py-3">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                      <Sprout size={18} aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {p.title}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {p.quantityKg} {t(unitKey(unitOf(p.unit)))} ·{" "}
+                        {formatRwf(p.pricePerKg)}/{t(unitKey(unitOf(p.unit)))}
+                      </div>
+                    </div>
+                    <ProductBadge status={p.status} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Offers */}
+        <Card className="gap-0 p-0">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base">{t("fdash.offers")}</CardTitle>
+            <Link
+              href="/farmer/offers"
+              className="flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+            >
+              {t("fdash.viewAll")}
+              <ArrowRight size={14} aria-hidden />
+            </Link>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {data.offers.length === 0 ? (
+              <div className="rounded-xl bg-accent/60 px-4 py-6 text-center text-sm text-muted-foreground">
+                {t("offer.noOffers")}
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {data.offers.slice(0, 3).map((o) => (
+                  <div key={o.id} className="flex items-center gap-3 py-3">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-600">
+                      <Handshake size={18} aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {o.buyerName}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {formatRwf(o.pricePerKg)}/
+                        {t(unitKey(unitOf(o.unit)))} · {o.quantityKg}{" "}
+                        {t(unitKey(unitOf(o.unit)))} · {o.productId.slice(0, 6)}
+                      </div>
+                    </div>
+                    <OfferBadge status={o.status} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Deals */}
+      <Card className="gap-0 p-0">
+        <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-base">{t("fdash.deals")}</CardTitle>
+          <Link
+            href="/farmer/payments"
+            className="flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+          >
+            {t("fdash.viewAll")}
+            <ArrowRight size={14} aria-hidden />
+          </Link>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {data.deals.length === 0 ? (
+            <div className="rounded-xl bg-accent/60 px-4 py-6 text-center text-sm text-muted-foreground">
+              {t("deal.empty.farmer")}
+            </div>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {data.deals.slice(0, 3).map((d) => (
+                <div key={d.id} className="flex items-center gap-3 py-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <Package size={18} aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">
+                      {d.productTitle}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {d.buyerName} ·{" "}
+                      {formatDateShort(d.createdAt, displayLocale)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-sm font-semibold">
+                      {formatRwf(d.amountRwf)}
+                    </div>
+                    <div className="mt-1">
+                      <DealBadge status={d.status} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* AI outlook */}
       <PredictionPanel />
+
+      <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <Loader size={13} aria-hidden />
+        {t("auth.demo.hint")}
+      </p>
     </div>
   );
 }

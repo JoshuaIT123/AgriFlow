@@ -1,7 +1,135 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* -------------------------------------------------------------
+   AgriFlow design tokens — premium, modern agri-fintech
+   ------------------------------------------------------------- */
+:root {
+  --radius: 0.875rem;
+
+  --background: 150 25% 97%;
+  --foreground: 155 35% 9%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 155 35% 9%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 155 35% 9%;
+
+  --primary: 152 60% 30%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 150 33% 93%;
+  --secondary-foreground: 152 55% 24%;
+
+  --muted: 150 20% 94%;
+  --muted-foreground: 148 12% 41%;
+
+  --accent: 84 72% 91%;
+  --accent-foreground: 152 60% 26%;
+
+  --destructive: 0 65% 45%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 150 14% 87%;
+  --input: 150 14% 83%;
+  --ring: 152 60% 30%;
+
+  --warning: 38 92% 38%;
+  --warning-foreground: 0 0% 100%;
+  --success: 152 60% 30%;
+  --success-foreground: 0 0% 100%;
+  --info: 199 65% 40%;
+  --info-foreground: 0 0% 100%;
+
+  --chart-1: 152 60% 30%;
+  --chart-2: 84 65% 42%;
+  --chart-3: 38 92% 45%;
+  --chart-4: 199 65% 40%;
+  --chart-5: 330 55% 45%;
+}
+
+.dark {
+  --background: 155 30% 8%;
+  --foreground: 150 20% 93%;
+  --card: 155 25% 10%;
+  --card-foreground: 150 20% 93%;
+  --popover: 155 25% 10%;
+  --popover-foreground: 150 20% 93%;
+  --primary: 152 55% 40%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 152 22% 16%;
+  --secondary-foreground: 150 20% 90%;
+  --muted: 152 20% 16%;
+  --muted-foreground: 150 12% 62%;
+  --accent: 152 25% 20%;
+  --accent-foreground: 150 20% 92%;
+  --destructive: 0 68% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 152 20% 18%;
+  --input: 152 20% 20%;
+  --ring: 152 55% 40%;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: "Plus Jakarta Sans Variable", "Inter Variable", ui-sans-serif,
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo,
+    Consolas, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
 
 :root {
-  --bg: #f4f6f3;
+  --bg: hsl(var(--background));
   --surface: #ffffff;
   --surface-2: #eef2ec;
   --ink: #15241c;
@@ -39,8 +167,7 @@ body {
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -781,96 +908,6 @@ h4 {
   }
 }
 
-/* ---------- Wandaa AI chat widget ---------- */
-.wandaa-fab {
-  position: fixed;
-  right: 16px;
-  bottom: calc(78px + env(safe-area-inset-bottom));
-  z-index: 40;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: none;
-  background: var(--brand);
-  color: #fff;
-  font-size: 22px;
-  box-shadow: var(--shadow-md);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-
-.wandaa-panel {
-  position: fixed;
-  right: 16px;
-  bottom: calc(138px + env(safe-area-inset-bottom));
-  z-index: 40;
-  width: min(340px, calc(100vw - 32px));
-  max-height: 60vh;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.wandaa-header {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 12px 14px;
-  font-weight: 800;
-  color: var(--brand-dark);
-  border-bottom: 1px solid var(--line);
-}
-
-.wandaa-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.wandaa-bubble {
-  max-width: 85%;
-  padding: 9px 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.wandaa-user {
-  align-self: flex-end;
-  background: var(--brand);
-  color: #fff;
-  border-bottom-right-radius: 4px;
-}
-
-.wandaa-assistant {
-  align-self: flex-start;
-  background: var(--surface-2);
-  color: var(--ink);
-  border-bottom-left-radius: 4px;
-}
-
-.wandaa-input-row {
-  display: flex;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.wandaa-input-row input {
-  flex: 1;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 9px 11px;
-  font-size: 14px;
-}
 
 /* ---------- Marketplace product cards ---------- */
 .mkt-grid {

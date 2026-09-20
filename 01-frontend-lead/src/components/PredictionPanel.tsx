@@ -4,7 +4,16 @@ import { useCallback, useState } from "react";
 import { useI18n } from "@/lib/i18n-context";
 import { apiPredictions, type Predictions } from "@/lib/api";
 import { formatRwf } from "@/lib/format";
-import { TrendingUp } from "lucide-react";
+import { Sparkles, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 /**
  * AI market outlook.
@@ -31,65 +40,98 @@ export function PredictionPanel() {
     }
   }, [t]);
 
-  const demandClass = (d: string) =>
-    d === "HIGH" ? "badge-ok" : d === "LOW" ? "badge-pending" : "badge-neutral";
+  const demandBadge = (d: string) =>
+    d === "HIGH"
+      ? "bg-emerald-500/10 text-emerald-700"
+      : d === "LOW"
+        ? "bg-amber-500/10 text-amber-700"
+        : "bg-muted text-muted-foreground";
 
   return (
-    <div className="card" style={{ marginTop: 16 }}>
-      <div className="section-head" style={{ marginTop: 0 }}>
+    <Card className="gap-0 p-0">
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-0">
         <div>
-          <h3 style={{ fontSize: 16, margin: 0 }}>{t("predict.title")}</h3>
-          <p className="subtle" style={{ margin: "4px 0 0" }}>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles size={16} className="text-primary" aria-hidden />
+            {t("predict.title")}
+          </CardTitle>
+          <CardDescription className="mt-1">
             {t("predict.subtitle")}
-          </p>
+          </CardDescription>
         </div>
-        <button className="btn btn-sm btn-secondary" onClick={load} disabled={busy}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={load}
+          disabled={busy}
+          className="ml-4 shrink-0"
+        >
           {busy ? t("predict.loading") : t("predict.run")}
-        </button>
-      </div>
+        </Button>
+      </CardHeader>
 
-      {error && <div className="form-error">{error}</div>}
+      <CardContent className="pt-0">
+        {error && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm font-medium text-red-700">
+            {error}
+          </div>
+        )}
 
-      {data && (
-        <>
-          {data.summary && (
-            <p className="subtle" style={{ marginTop: 4 }}>
-              {data.summary}
-            </p>
-          )}
+        {data && (
+          <div className="mt-3 space-y-4">
+            {data.summary && (
+              <p className="rounded-xl bg-primary/5 px-4 py-3 text-sm text-foreground/80">
+                {data.summary}
+              </p>
+            )}
 
-          {data.forecasts.length === 0 ? (
-            <div className="empty">{t("predict.empty")}</div>
-          ) : (
-            data.forecasts.map((f) => (
-              <div className="tx-row" key={f.productId}>
-                <div className="tx-icon" aria-hidden><TrendingUp size={22} /></div>
-                <div className="tx-main">
-                  <div className="tx-title">{f.name}</div>
-                  <div className="tx-sub">{f.note}</div>
-                  <div style={{ marginTop: 6 }}>
-                    <span className={`badge ${demandClass(f.demand)}`}>
-                      {t(`predict.demand.${f.demand.toLowerCase()}`)}
+            {data.forecasts.length === 0 ? (
+              <p className="rounded-xl bg-accent/60 px-4 py-6 text-center text-sm text-muted-foreground">
+                {t("predict.empty")}
+              </p>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {data.forecasts.map((f) => (
+                  <div
+                    key={f.productId}
+                    className="flex flex-wrap items-center gap-3 py-3"
+                  >
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                      <TrendingUp size={18} aria-hidden />
                     </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">{f.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {f.note}
+                      </div>
+                      <span
+                        className={cn(
+                          "mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                          demandBadge(f.demand)
+                        )}
+                      >
+                        {t(`predict.demand.${f.demand.toLowerCase()}`)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono text-sm font-bold">
+                        {formatRwf(f.suggestedMin)} – {formatRwf(f.suggestedMax)}
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {t("predict.now")} {formatRwf(f.currentPrice)}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="tx-side">
-                  <div className="tx-amount mono">
-                    {formatRwf(f.suggestedMin)} – {formatRwf(f.suggestedMax)}
-                  </div>
-                  <div className="tx-sub" style={{ marginTop: 4 }}>
-                    {t("predict.now")} {formatRwf(f.currentPrice)}
-                  </div>
-                </div>
+                ))}
               </div>
-            ))
-          )}
+            )}
 
-          <p className="subtle" style={{ marginTop: 10, fontSize: 12 }}>
-            {t("predict.disclaimer")}
-          </p>
-        </>
-      )}
-    </div>
+            <p className="text-xs text-muted-foreground">
+              {t("predict.disclaimer")}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

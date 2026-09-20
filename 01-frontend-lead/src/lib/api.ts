@@ -291,7 +291,7 @@ export function apiPredictions(): Promise<{ predictions: Predictions }> {
   return request<{ predictions: Predictions }>("/api/predictions");
 }
 
-/* ---------------- Wandaa AI ---------------- */
+/* ---------------- AgriFlowChat ---------------- */
 
 export interface ChatMessage {
   role: "user" | "assistant";
